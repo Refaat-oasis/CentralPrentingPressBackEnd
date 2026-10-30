@@ -1,0 +1,44 @@
+## Build and compile outputs
+[Bb]in/
+[Oo]bj/
+[Aa]rms/
+[Aa]rm64/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa]ssets/
+
+## Visual Studio & Rider IDE files
+.vs/
+.idea/
+.vscode/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## Publishing and deployment outputs
+publish/
+PublishProfiles/
+*.Publish.xml
+*.pubxml
+
+## Environment & sensitive secrets
+appsettings.Development.json
+appsettings.*.local.json
+*.local.json
+
+## Database & SQLite files
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+## Test & Crash dumps
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
+*.log
+*.dmp
+*.crash
