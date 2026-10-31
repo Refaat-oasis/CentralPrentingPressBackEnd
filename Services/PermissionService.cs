@@ -32,6 +32,9 @@ public class PermissionService
 
         if (user == null || !user.IsActive) return false;
 
+        // Root administrator always has full access
+        if (user.Email == "admin@aup.edu.eg" || user.EmployeeCode == "EMP001") return true;
+
         var module = await _context.SystemModules.FirstOrDefaultAsync(m => m.ModuleKey == moduleKey && m.IsActive);
         if (module == null) return false;
 
@@ -81,6 +84,19 @@ public class PermissionService
 
         var modules = await _context.SystemModules.Where(m => m.IsActive).ToListAsync();
         if (user == null) return new List<ModuleEffectivePermissionDto>();
+
+        // Root administrator always has full access to all modules
+        if (user.Email == "admin@aup.edu.eg" || user.EmployeeCode == "EMP001")
+        {
+            return modules.Select(mod => new ModuleEffectivePermissionDto(
+                mod.ModuleKey,
+                mod.ModuleNameAr,
+                true,
+                true,
+                true,
+                true
+            )).ToList();
+        }
 
         var rolePermissions = user.JobTitleId.HasValue
             ? await _context.RolePermissions.Where(rp => rp.JobTitleId == user.JobTitleId.Value).ToListAsync()

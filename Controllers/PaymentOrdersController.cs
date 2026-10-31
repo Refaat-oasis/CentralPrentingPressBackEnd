@@ -230,6 +230,72 @@ public class PaymentOrdersController : ControllerBase
         });
     }
 
+    [HttpPut("{id}")]
+    [PermissionAuthorize("PAYMENT_ORDERS", "CanUpdate")]
+    public async Task<IActionResult> Update(int id, [FromBody] CreatePaymentOrderDto dto)
+    {
+        var paymentOrder = await _context.PaymentOrders
+            .Include(p => p.TasweyaLinks)
+            .FirstOrDefaultAsync(p => p.PaymentOrderId == id);
+
+        if (paymentOrder == null) return NotFound(new { message = "أمر الدفع غير موجود" });
+
+        if (paymentOrder.IsConfirmed)
+        {
+            // If already confirmed, allow editing metadata only (PaymentDate, Notes)
+            paymentOrder.PaymentDate = dto.PaymentDate;
+            paymentOrder.Notes = dto.Notes?.Trim();
+            await _context.SaveChangesAsync();
+            return Ok(new { message = "تم تحديث ملاحظات وتاريخ أمر الدفع المؤكد بنجاح" });
+        }
+
+        if (string.IsNullOrWhiteSpace(dto.PaymentOrderNumber))
+            return BadRequest(new { message = "يرجى إدخال رقم أمر الدفع" });
+
+        if (dto.TasweyaIds == null || dto.TasweyaIds.Count == 0)
+            return BadRequest(new { message = "يرجى تحديد كشف تسوية واحد على الأقل" });
+
+        if (await _context.PaymentOrders.AnyAsync(p => p.PaymentOrderNumber == dto.PaymentOrderNumber.Trim() && p.PaymentOrderId != id))
+            return BadRequest(new { message = "رقم أمر الدفع مسجل مسبقاً" });
+
+        var tasweyat = await _context.Tasweyat
+            .Where(t => dto.TasweyaIds.Contains(t.TasweyaId) && t.IsActive)
+            .ToListAsync();
+
+        if (tasweyat.Count != dto.TasweyaIds.Count)
+            return BadRequest(new { message = "بعض كشوف التسوية المحددة غير موجودة أو غير فعالة" });
+
+        int accountId = tasweyat.First().AccountId;
+        int? customerId = tasweyat.Select(t => t.CustomerId).Distinct().Count() == 1 ? tasweyat.First().CustomerId : null;
+
+        decimal totalPaidAmount = MoqaysaCalculationService.Round2(tasweyat.Sum(t => t.SettlementGrandTotal));
+        string tafqeet = ArabicTafqeetService.ToWords(totalPaidAmount);
+
+        paymentOrder.PaymentOrderNumber = dto.PaymentOrderNumber.Trim();
+        paymentOrder.PaymentDate = dto.PaymentDate;
+        paymentOrder.AccountId = accountId;
+        paymentOrder.CustomerId = customerId;
+        paymentOrder.TotalPaidAmount = totalPaidAmount;
+        paymentOrder.TotalAmountInWordsAr = tafqeet;
+        paymentOrder.Notes = dto.Notes?.Trim();
+
+        _context.PaymentOrderTasweyaLinks.RemoveRange(paymentOrder.TasweyaLinks);
+        paymentOrder.TasweyaLinks.Clear();
+
+        foreach (var t in tasweyat)
+        {
+            paymentOrder.TasweyaLinks.Add(new PaymentOrderTasweyaLink
+            {
+                PaymentOrderId = paymentOrder.PaymentOrderId,
+                TasweyaId = t.TasweyaId,
+                SnapshotTasweyaAmount = t.SettlementGrandTotal
+            });
+        }
+
+        await _context.SaveChangesAsync();
+        return Ok(new { message = "تم حفظ تعديلات أمر الدفع بنجاح", paymentOrderId = paymentOrder.PaymentOrderId });
+    }
+
     [HttpPost("{id}/confirm")]
     [PermissionAuthorize("PAYMENT_ORDERS", "CanUpdate")]
     public async Task<IActionResult> ConfirmPaymentOrder(int id)

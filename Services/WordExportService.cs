@@ -73,25 +73,66 @@ public class WordExportService
             );
             table.AppendChild(tblPr);
 
-            // Add Header Row
-            table.AppendChild(CreateTableRow("البيــــــــان", "القيمة (جنيه)", true));
-            table.AppendChild(CreateTableRow("الخامات", $"{m.RawMaterials:F2}"));
-            table.AppendChild(CreateTableRow("م. تشغيل الخامات (5.5%)", $"{m.MaterialProcessingFee:F2}"));
-            table.AppendChild(CreateTableRow("جملة الخامات", $"{m.TotalMaterials:F2}"));
-            table.AppendChild(CreateTableRow("جملة أجور العمال", $"{m.TotalWorkerWages:F2}"));
-            table.AppendChild(CreateTableRow("جملة م. الآلات", $"{m.TotalMachineCosts:F2}"));
-            table.AppendChild(CreateTableRow("الإجمالي (1)", $"{m.SubTotal1:F2}"));
-            if (m.ApplyAdminExpenses) table.AppendChild(CreateTableRow("مصروفات إدارية (8.5%)", $"{m.AdminExpenses:F2}"));
-            table.AppendChild(CreateTableRow("إجمالي المصروفات", $"{m.TotalExpenses:F2}"));
-            if (m.ApplyMarkup) table.AppendChild(CreateTableRow($"النسبة ({m.SelectedMarkupPercent}%)", $"{m.MarkupAmount:F2}"));
-            table.AppendChild(CreateTableRow("الجملة", $"{m.TotalAfterMarkup:F2}"));
-            table.AppendChild(CreateTableRow("وزارة المالية (15%)", $"{m.MinistryOfFinanceFee:F2}"));
-            table.AppendChild(CreateTableRow("ص. ت. العاملين (10%)", $"{m.WorkersSyndicateFund:F2}"));
-            table.AppendChild(CreateTableRow("الإجمالي (2)", $"{m.SubTotal2:F2}"));
-            if (m.ApplyOther) table.AppendChild(CreateTableRow("أخرى (10%)", $"{m.OtherAmount:F2}"));
-            table.AppendChild(CreateTableRow("إجمالي (3)", $"{m.SubTotal3:F2}"));
-            if (m.ApplyVat) table.AppendChild(CreateTableRow("ض. القيمة المضافة (14%)", $"{m.VatAmount:F2}"));
-            table.AppendChild(CreateTableRow("القيمة الإجمالية النهائية", $"{m.FinalGrandTotal:F2}", isBold: true));
+            // Add Header Rows
+            table.AppendChild(CreateCascadeWordRow("عناصر المقايسة والحساب", "جزئي", "كلي", "الخامــــــــــــات", isHeader: true));
+            table.AppendChild(CreateCascadeWordRow("البيان", "ق / جنيه", "ق / جنيه", "الصنف / الكمية / السعر", isHeader: true));
+
+            // Section 1: Worker Wages Subtotal
+            table.AppendChild(CreateCascadeWordRow("جملة أجور العمال", null, m.TotalWorkerWages, isBold: true));
+
+            // Section 2: Machine Operating Costs Subtotal
+            table.AppendChild(CreateCascadeWordRow("جملة مصاريف الآلات", null, m.TotalMachineCosts, isBold: true));
+
+            // Cascade 1: Raw Materials
+            table.AppendChild(CreateCascadeWordRow("الخامات الأولية", m.RawMaterials, null, $"إجمالي الخامات: {m.RawMaterials:F2} ج.م"));
+
+            // Cascade 2: Material Processing Fee
+            table.AppendChild(CreateCascadeWordRow("م. تشغيل الخامات (5.5%)", m.MaterialProcessingFee, null));
+
+            // Cascade 3: Films
+            if (m.FilmsProcessingFee > 0)
+                table.AppendChild(CreateCascadeWordRow("م. تشغيل الأفلام", m.FilmsProcessingFee, null));
+
+            // Cascade 4: Total Materials
+            table.AppendChild(CreateCascadeWordRow("جملة الخامات", null, m.TotalMaterials, isBold: true));
+
+            // Cascade 5: Subtotal 1
+            table.AppendChild(CreateCascadeWordRow("الإجمالي (1)", null, m.SubTotal1, isBold: true));
+
+            // Cascade 6: Admin Expenses
+            table.AppendChild(CreateCascadeWordRow($"مصروفات إدارية {(m.ApplyAdminExpenses ? "(8.5%)" : "")}", m.ApplyAdminExpenses ? m.AdminExpenses : null, null));
+
+            // Cascade 7: Total Expenses
+            table.AppendChild(CreateCascadeWordRow("إجمالي المصروفات", null, m.TotalExpenses, isBold: true));
+
+            // Cascade 8: Markup
+            table.AppendChild(CreateCascadeWordRow($"النسبة {(m.ApplyMarkup ? $"({m.SelectedMarkupPercent}%)" : "")}", m.ApplyMarkup ? m.MarkupAmount : null, null));
+
+            // Cascade 9: Total After Markup
+            table.AppendChild(CreateCascadeWordRow("الجملة", null, m.TotalAfterMarkup, isBold: true));
+
+            // Cascade 10: Ministry of Finance
+            table.AppendChild(CreateCascadeWordRow("وزارة المالية (15%)", m.MinistryOfFinanceFee, null));
+
+            // Cascade 11: Workers Fund
+            table.AppendChild(CreateCascadeWordRow("ص. ت. العاملين (10%)", m.WorkersSyndicateFund, null));
+
+            // Cascade 12: Subtotal 2
+            table.AppendChild(CreateCascadeWordRow("الإجمالي (2)", null, m.SubTotal2, isBold: true));
+
+            // Cascade 13: Other
+            if (m.ApplyOther)
+                table.AppendChild(CreateCascadeWordRow("أخرى (10%)", m.OtherAmount, null));
+
+            // Cascade 14: Subtotal 3
+            table.AppendChild(CreateCascadeWordRow("إجمالي (3)", null, m.SubTotal3, isBold: true));
+
+            // Cascade 15: VAT
+            if (m.ApplyVat)
+                table.AppendChild(CreateCascadeWordRow("ض. القيمة المضافة (14%)", m.VatAmount, null));
+
+            // Final Grand Total
+            table.AppendChild(CreateCascadeWordRow("القيمة الإجمالية النهائية", null, m.FinalGrandTotal, isBold: true));
 
             body.Append(table);
 
@@ -178,18 +219,26 @@ public class WordExportService
             );
             table.AppendChild(tblPr);
 
-            table.AppendChild(CreateTableRow("البيــــــــان", "المبلغ (جنيه)", true));
-            table.AppendChild(CreateTableRow("خامـــــــات", $"{t.TotalMaterialsSum:F2}"));
-            table.AppendChild(CreateTableRow("أجور عمال", $"{t.TotalWorkerWagesSum:F2}"));
-            table.AppendChild(CreateTableRow("م . الآلات", $"{t.TotalMachineCostsSum:F2}"));
-            table.AppendChild(CreateTableRow("م . إدارية", $"{t.AdminExpensesSum:F2}"));
-            table.AppendChild(CreateTableRow("النسبة المضافة", $"{t.MarkupAmountSum:F2}"));
-            table.AppendChild(CreateTableRow("وزارة المالية", $"{t.MinistryOfFinanceSum:F2}"));
-            table.AppendChild(CreateTableRow("ص. ت. العاملين", $"{t.WorkersFundSum:F2}"));
-            if (t.OtherAmountSum > 0) table.AppendChild(CreateTableRow("أخرى", $"{t.OtherAmountSum:F2}"));
-            table.AppendChild(CreateTableRow("حـ / الإيرادات", $"{t.RevenuesTotal:F2}", isBold: true));
-            if (t.VatTotal > 0) table.AppendChild(CreateTableRow("حـ / القيمة المضافة", $"{t.VatTotal:F2}", isBold: true));
-            table.AppendChild(CreateTableRow("الإجمالي الكلي للتسوية (المطالبة)", $"{t.SettlementGrandTotal:F2}", isBold: true));
+            table.AppendChild(CreateTasweyaWordRow("اجمالى", "أفرادى", "البيــــــــــــــــــــان", "اجمالى", "أفرادى", isHeader: true));
+            table.AppendChild(CreateTasweyaWordRow("-", $"{t.SettlementGrandTotal:F2}", t.Account?.DebitHeaderTextAr ?? "من حـ / الإدارة العامة", "-", "-", isBold: true));
+            table.AppendChild(CreateTasweyaWordRow("", "", $"إذن تشغيل رقم : {t.JobOrderNumbersText}", "", ""));
+            table.AppendChild(CreateTasweyaWordRow("", "", $"الجهة : {t.Customer?.CustomerNameAr}", "", ""));
+            table.AppendChild(CreateTasweyaWordRow("", "", $"مطالبة رقم : {t.ClaimNumber}", "", ""));
+            table.AppendChild(CreateTasweyaWordRow("", "", "إلى مذكورين", "", "", isBold: true));
+            table.AppendChild(CreateTasweyaWordRow("", "", "حـ / الإيرادات", $"{t.RevenuesTotal:F2}", "-", isBold: true));
+            if (t.VatTotal > 0)
+            {
+                table.AppendChild(CreateTasweyaWordRow("", "", "حـ / القيمة المضافة", $"{t.VatTotal:F2}", "-", isBold: true));
+            }
+            table.AppendChild(CreateTasweyaWordRow("", "", "    خامـــــــات", "", $"{t.TotalMaterialsSum:F2}"));
+            table.AppendChild(CreateTasweyaWordRow("", "", "    أجور عمال", "", $"{t.TotalWorkerWagesSum:F2}"));
+            table.AppendChild(CreateTasweyaWordRow("", "", "    م . الآلات", "", $"{t.TotalMachineCostsSum:F2}"));
+            if (t.AdminExpensesSum > 0) table.AppendChild(CreateTasweyaWordRow("", "", "    م . إدارية", "", $"{t.AdminExpensesSum:F2}"));
+            if (t.MarkupAmountSum > 0) table.AppendChild(CreateTasweyaWordRow("", "", "    النسبة المضافة", "", $"{t.MarkupAmountSum:F2}"));
+            if (t.MinistryOfFinanceSum > 0) table.AppendChild(CreateTasweyaWordRow("", "", "    وزارة المالية", "", $"{t.MinistryOfFinanceSum:F2}"));
+            if (t.WorkersFundSum > 0) table.AppendChild(CreateTasweyaWordRow("", "", "    ص. ت. العاملين", "", $"{t.WorkersFundSum:F2}"));
+            if (t.OtherAmountSum > 0) table.AppendChild(CreateTasweyaWordRow("", "", "    أخرى", "", $"{t.OtherAmountSum:F2}"));
+            table.AppendChild(CreateTasweyaWordRow($"{t.SettlementGrandTotal:F2}", "-", $"المجموع المتوازن (فقط وقدره: {t.TotalAmountInWordsAr})", $"{t.SettlementGrandTotal:F2}", "-", isBold: true));
 
             body.Append(table);
 
@@ -337,6 +386,57 @@ public class WordExportService
         );
 
         row.Append(c1, c2);
+        return row;
+    }
+
+    private static TableRow CreateCascadeWordRow(string label, decimal? partialAmount, decimal? totalAmount, string note = "", bool isBold = false)
+    {
+        string pStr = partialAmount.HasValue ? $"{partialAmount.Value:F2}" : "-";
+        string tStr = totalAmount.HasValue ? $"{totalAmount.Value:F2}" : "-";
+        return CreateCascadeWordRow(label, pStr, tStr, note, isHeader: false, isBold: isBold);
+    }
+
+    private static TableRow CreateCascadeWordRow(string label, string partialStr, string totalStr, string note = "", bool isHeader = false, bool isBold = false)
+    {
+        var row = new TableRow();
+        // In Word BiDi table, first cell is on the RIGHT (Elements side), and last cell is on the LEFT (Materials side)
+        row.Append(
+            CreateWordCell(label, "1800", isHeader, isBold, JustificationValues.Right),
+            CreateWordCell(partialStr, "1100", isHeader, isBold, JustificationValues.Center),
+            CreateWordCell(totalStr, "1100", isHeader, isBold, JustificationValues.Center),
+            CreateWordCell(note, "1000", isHeader, isBold, JustificationValues.Right)
+        );
+        return row;
+    }
+
+    private static TableCell CreateWordCell(string text, string widthPct, bool isHeader, bool isBold, JustificationValues align)
+    {
+        return new TableCell(
+            new TableCellProperties(new TableCellWidth() { Type = TableWidthUnitValues.Pct, Width = widthPct }),
+            new Paragraph(
+                new ParagraphProperties(new Justification() { Val = align }, new BiDi()),
+                new Run(
+                    new RunProperties(
+                        isHeader || isBold ? new Bold() : new RunProperties(),
+                        new FontSize() { Val = isHeader ? "22" : "18" },
+                        new RightToLeftText()
+                    ),
+                    new Text(text ?? "")
+                )
+            )
+        );
+    }
+
+    private static TableRow CreateTasweyaWordRow(string rTotal, string rPartial, string statement, string lTotal, string lPartial, bool isHeader = false, bool isBold = false)
+    {
+        var row = new TableRow();
+        row.Append(
+            CreateWordCell(rTotal, "1000", isHeader, isBold, JustificationValues.Center),
+            CreateWordCell(rPartial, "1000", isHeader, isBold, JustificationValues.Center),
+            CreateWordCell(statement, "2000", isHeader, isBold, isHeader ? JustificationValues.Center : JustificationValues.Right),
+            CreateWordCell(lTotal, "1000", isHeader, isBold, JustificationValues.Center),
+            CreateWordCell(lPartial, "1000", isHeader, isBold, JustificationValues.Center)
+        );
         return row;
     }
 }

@@ -42,3 +42,4 @@ appsettings.*.local.json
 *.log
 *.dmp
 *.crash
+
