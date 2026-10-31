@@ -12,6 +12,7 @@ namespace CentralPress.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Route("api/formula-configs")]
 [Authorize]
 public class FormulaConfigsController : ControllerBase
 {
