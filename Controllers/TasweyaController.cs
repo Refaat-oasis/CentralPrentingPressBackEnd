@@ -49,7 +49,7 @@ public class TasweyaController : ControllerBase
         var query = _context.Moqaysat
             .Include(m => m.Customer)
                 .ThenInclude(c => c!.Account)
-            .Where(m => m.IsActive && !m.IsIncludedInTasweya);
+            .Where(m => m.IsActive && (!m.IsIncludedInTasweya || !_context.TasweyaMoqaysaLinks.Any(link => link.MoqaysaId == m.MoqaysaId && link.Tasweya != null && link.Tasweya.IsActive)));
 
         if (customerId.HasValue)
             query = query.Where(m => m.CustomerId == customerId.Value);
@@ -224,8 +224,16 @@ public class TasweyaController : ControllerBase
         if (moqaysat.Count != dto.MoqaysaIds.Count)
             return BadRequest(new { message = "بعض المقايسات المحددة غير موجودة أو غير فعالة" });
 
-        if (moqaysat.Any(m => m.IsIncludedInTasweya))
-            return BadRequest(new { message = "إحدى المقايسات المحددة مُدرجة بالفعل في كشف تسوية آخر" });
+        var activeConflicts = await _context.TasweyaMoqaysaLinks
+            .Include(link => link.Moqaysa)
+            .Where(link => dto.MoqaysaIds.Contains(link.MoqaysaId) && link.Tasweya != null && link.Tasweya.IsActive)
+            .Select(link => link.Moqaysa != null ? link.Moqaysa.JobOrderNumber : "")
+            .Where(jobNo => !string.IsNullOrEmpty(jobNo))
+            .Distinct()
+            .ToListAsync();
+
+        if (activeConflicts.Count > 0)
+            return BadRequest(new { message = $"إحدى المقايسات المحددة (إذن تشغيل: {string.Join(" ، ", activeConflicts)}) مُدرجة بالفعل في كشف تسوية آخر نشط" });
 
         // Aggregate financial cascade
         decimal totalMat = moqaysat.Sum(m => m.TotalMaterials);
@@ -342,8 +350,16 @@ public class TasweyaController : ControllerBase
         if (moqaysat.Count != dto.MoqaysaIds.Count)
             return BadRequest(new { message = "بعض المقايسات المحددة غير موجودة أو غير فعالة" });
 
-        if (moqaysat.Any(m => m.IsIncludedInTasweya))
-            return BadRequest(new { message = "إحدى المقايسات المحددة مُدرجة بالفعل في كشف تسوية آخر" });
+        var activeConflicts = await _context.TasweyaMoqaysaLinks
+            .Include(link => link.Moqaysa)
+            .Where(link => dto.MoqaysaIds.Contains(link.MoqaysaId) && link.TasweyaId != id && link.Tasweya != null && link.Tasweya.IsActive)
+            .Select(link => link.Moqaysa != null ? link.Moqaysa.JobOrderNumber : "")
+            .Where(jobNo => !string.IsNullOrEmpty(jobNo))
+            .Distinct()
+            .ToListAsync();
+
+        if (activeConflicts.Count > 0)
+            return BadRequest(new { message = $"إحدى المقايسات المحددة (إذن تشغيل: {string.Join(" ، ", activeConflicts)}) مُدرجة بالفعل في كشف تسوية آخر نشط" });
 
         // Aggregate financial cascade
         decimal totalMat = moqaysat.Sum(m => m.TotalMaterials);
@@ -411,13 +427,71 @@ public class TasweyaController : ControllerBase
     [PermissionAuthorize("TASWEYA", "CanToggleActive")]
     public async Task<IActionResult> ToggleActive(int id)
     {
-        var item = await _context.Tasweyat.FindAsync(id);
+        var item = await _context.Tasweyat
+            .Include(t => t.MoqaysaLinks)
+            .FirstOrDefaultAsync(t => t.TasweyaId == id);
+
         if (item == null) return NotFound(new { message = "كشف التسوية غير موجود" });
 
-        item.IsActive = !item.IsActive;
-        await _context.SaveChangesAsync();
+        var moqaysaIds = item.MoqaysaLinks.Select(ml => ml.MoqaysaId).ToList();
+        var linkedMoqaysat = await _context.Moqaysat.Where(m => moqaysaIds.Contains(m.MoqaysaId)).ToListAsync();
 
-        return Ok(new { message = item.IsActive ? "تم تفعيل كشف التسوية" : "تم إلغاء تفعيل كشف التسوية", isActive = item.IsActive });
+        if (item.IsActive)
+        {
+            // Deactivating: Release all linked moqaysat so they become unsettled and can be added to new tasweyat
+            if (item.IsPaid)
+            {
+                return BadRequest(new { message = "لا يمكن إلغاء تفعيل كشف تسوية تم سداده وتأكيده بأمر دفع رسمي" });
+            }
+
+            foreach (var m in linkedMoqaysat)
+            {
+                m.IsIncludedInTasweya = false;
+            }
+
+            item.IsActive = false;
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                message = "تم إلغاء تفعيل كشف التسوية وتحرير المقايسات التابعة له لتصبح متاحة في كشوف التسوية الجديدة",
+                isActive = false
+            });
+        }
+        else
+        {
+            // Re-activating: Verify none of the linked moqaysat are currently in another ACTIVE tasweya
+            var alreadyIncludedInActive = await _context.TasweyaMoqaysaLinks
+                .Include(link => link.Moqaysa)
+                .Where(link => moqaysaIds.Contains(link.MoqaysaId) && link.TasweyaId != item.TasweyaId && link.Tasweya != null && link.Tasweya.IsActive)
+                .Select(link => link.Moqaysa != null ? link.Moqaysa.JobOrderNumber : "")
+                .Where(jobNo => !string.IsNullOrEmpty(jobNo))
+                .Distinct()
+                .ToListAsync();
+
+            if (alreadyIncludedInActive.Count > 0)
+            {
+                return BadRequest(new
+                {
+                    message = $"لا يمكن إعادة تفعيل كشف التسوية؛ نظراً لأن المقايسات ذات أذون التشغيل ({string.Join(" ، ", alreadyIncludedInActive)}) تم إدراجها بالفعل في كشف تسوية آخر نشط."
+                });
+            }
+
+            // Re-lock all linked moqaysat back
+            foreach (var m in linkedMoqaysat)
+            {
+                m.IsIncludedInTasweya = true;
+            }
+
+            item.IsActive = true;
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                message = "تم إعادة تفعيل كشف التسوية وربط المقايسات التابعة له بنجاح",
+                isActive = true
+            });
+        }
     }
 
     [HttpGet("{id}/export-word")]
