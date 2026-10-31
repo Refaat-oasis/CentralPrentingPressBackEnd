@@ -158,9 +158,19 @@ public class AuthController : ControllerBase
         user.PasswordResetCodeExpiryUtc = DateTime.UtcNow.AddMinutes(15);
         await _userManager.UpdateAsync(user);
 
-        await _emailService.SendPasswordResetCodeAsync(user.Email!, user.FullName, code);
+        var (emailSent, emailError) = await _emailService.SendPasswordResetCodeAsync(user.Email!, user.FullName, code);
 
-        return Ok(new { message = "تم إرسال رمز التحقق بنجاح إلى البريد الإلكتروني" });
+        if (!emailSent)
+        {
+            return Ok(new 
+            { 
+                message = "تم توليد رمز التحقق، ولكن تعذر تسليمه للبريد الإلكتروني (يرجى مراجعة إعدادات خادم البريد SMTP)", 
+                emailSent = false,
+                emailError 
+            });
+        }
+
+        return Ok(new { message = "تم إرسال رمز التحقق بنجاح إلى البريد الإلكتروني", emailSent = true });
     }
 
     [HttpPost("verify-reset-code")]

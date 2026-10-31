@@ -117,13 +117,16 @@ public class AdminUsersController : ControllerBase
         if (!result.Succeeded)
             return BadRequest(new { message = string.Join(", ", result.Errors.Select(e => e.Description)) });
 
-        await _emailService.SendNewUserInvitationCodeAsync(user.Email, user.FullName, user.EmployeeCode, password);
+        var (emailSent, emailErr) = await _emailService.SendNewUserInvitationCodeAsync(user.Email, user.FullName, user.EmployeeCode, password);
 
         return Ok(new
         {
-            message = "تمت إضافة الموظف بنجاح وإرسال رمز الدخول المبدئي إلى بريده الإلكتروني",
+            message = emailSent
+                ? "تمت إضافة الموظف بنجاح وإرسال رمز الدخول المبدئي إلى بريده الإلكتروني"
+                : "تمت إضافة الموظف بنجاح، ولكن تعذر تسليم البريد الإلكتروني (يمكن استخدام رمز الدخول المبدئي أدناه)",
             userId = user.Id,
-            initialCode = password
+            initialCode = password,
+            emailSent
         });
     }
 
@@ -267,12 +270,34 @@ public class AdminUsersController : ControllerBase
         user.MustChangePassword = true;
         await _userManager.UpdateAsync(user);
 
-        await _emailService.SendNewUserInvitationCodeAsync(user.Email ?? "", user.FullName ?? "", user.EmployeeCode ?? "", newCode);
+        var (emailSent, emailErr) = await _emailService.SendNewUserInvitationCodeAsync(user.Email ?? "", user.FullName ?? "", user.EmployeeCode ?? "", newCode);
 
         return Ok(new
         {
-            message = "تمت إعادة إرسال رمز الدخول المبدئي بنجاح إلى البريد الإلكتروني للموظف",
-            initialCode = newCode
+            message = emailSent
+                ? "تمت إعادة إرسال رمز الدخول المبدئي بنجاح إلى البريد الإلكتروني للموظف"
+                : "تم توليد رمز الدخول الجديد ولكن تعذر تسليم البريد الإلكتروني (يمكن نسخ الرمز أدناه)",
+            initialCode = newCode,
+            emailSent
         });
+    }
+
+    public record TestSmtpRequestDto(string? TargetEmail);
+
+    [HttpPost("test-smtp")]
+    [PermissionAuthorize("EMPLOYEES", "CanAccess")]
+    public async Task<IActionResult> TestSmtp([FromBody] TestSmtpRequestDto? dto)
+    {
+        var target = !string.IsNullOrWhiteSpace(dto?.TargetEmail)
+            ? dto.TargetEmail.Trim()
+            : "ahta601@gmail.com";
+
+        var (success, message, details) = await _emailService.TestSmtpConnectionAsync(target);
+        if (!success)
+        {
+            return BadRequest(new { message, details, success = false });
+        }
+
+        return Ok(new { message, success = true });
     }
 }

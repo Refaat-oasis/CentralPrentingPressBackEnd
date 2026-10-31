@@ -10,8 +10,9 @@ namespace CentralPress.API.Services;
 
 public interface IEmailService
 {
-    Task SendPasswordResetCodeAsync(string email, string employeeName, string resetCode);
-    Task SendNewUserInvitationCodeAsync(string email, string employeeName, string employeeCode, string initialCode);
+    Task<(bool Success, string? ErrorMessage)> SendPasswordResetCodeAsync(string email, string employeeName, string resetCode);
+    Task<(bool Success, string? ErrorMessage)> SendNewUserInvitationCodeAsync(string email, string employeeName, string employeeCode, string initialCode);
+    Task<(bool Success, string Message, string? Details)> TestSmtpConnectionAsync(string testRecipientEmail);
 }
 
 public class EmailService : IEmailService
@@ -25,7 +26,7 @@ public class EmailService : IEmailService
         _config = config;
     }
 
-    public async Task SendPasswordResetCodeAsync(string email, string employeeName, string resetCode)
+    public async Task<(bool Success, string? ErrorMessage)> SendPasswordResetCodeAsync(string email, string employeeName, string resetCode)
     {
         _logger.LogInformation("=================================================================");
         _logger.LogInformation("[EMAIL DISPATCH] Password Reset Code for {Name} ({Email}): {Code}", employeeName, email, resetCode);
@@ -50,10 +51,10 @@ public class EmailService : IEmailService
                 <p style=""font-size: 12px; color: #94a3b8; text-align: center;"">هذا الرمز صالح لمدة 15 دقيقة فقط. إذا لم تكن أنت من طلب هذا الرمز، يرجى تجاهل هذه الرسالة.</p>
             </div>";
 
-        await TrySendSmtpEmailAsync(email, employeeName, subject, bodyHtml);
+        return await TrySendSmtpEmailAsync(email, employeeName, subject, bodyHtml);
     }
 
-    public async Task SendNewUserInvitationCodeAsync(string email, string employeeName, string employeeCode, string initialCode)
+    public async Task<(bool Success, string? ErrorMessage)> SendNewUserInvitationCodeAsync(string email, string employeeName, string employeeCode, string initialCode)
     {
         _logger.LogInformation("=================================================================");
         _logger.LogInformation("[EMAIL DISPATCH] New Employee Account Invitation: {Name} | Code: {EmpCode} | Email: {Email} | Initial Password: {Password}", employeeName, employeeCode, email, initialCode);
@@ -88,25 +89,70 @@ public class EmailService : IEmailService
                 </div>
             </div>";
 
-        await TrySendSmtpEmailAsync(email, employeeName, subject, bodyHtml);
+        return await TrySendSmtpEmailAsync(email, employeeName, subject, bodyHtml);
     }
 
-    private async Task TrySendSmtpEmailAsync(string recipientEmail, string recipientName, string subject, string htmlContent)
+    public async Task<(bool Success, string Message, string? Details)> TestSmtpConnectionAsync(string testRecipientEmail)
+    {
+        var host = _config["SmtpSettings:Host"];
+        var senderEmail = _config["SmtpSettings:SenderEmail"] ?? "ahta601@gmail.com";
+        var rawUserName = _config["SmtpSettings:UserName"];
+
+        var subject = "مطبعة جامعة أسيوط - اختبار إرسال البريد الإلكتروني (SMTP Test)";
+        var bodyHtml = $@"
+            <div dir=""rtl"" style=""font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #10b981; border-radius: 12px; background-color: #ffffff;"">
+                <div style=""text-align: center; border-bottom: 2px solid #10b981; padding-bottom: 16px; margin-bottom: 20px;"">
+                    <h2 style=""color: #047857; margin: 0;"">مطبعة جامعة أسيوط المركزية</h2>
+                    <p style=""color: #64748b; font-size: 13px; margin: 4px 0 0 0;"">اختبار الاتصال بخادم البريد الإلكتروني بنجاح ✅</p>
+                </div>
+                <p style=""font-size: 15px; color: #1e293b;"">تحية طيبة،</p>
+                <p style=""font-size: 14px; color: #334155;"">تم استلام هذه الرسالة بنجاح كاختبار مباشر لاتصال خادم البريد (SMTP) الخاص بمنظومة المطبعة المركزية.</p>
+                <div style=""background-color: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; padding: 14px; margin: 18px 0; font-size: 13px; color: #065f46;"">
+                    <div><strong>خادم البريد:</strong> {host}</div>
+                    <div><strong>البريد المرسل:</strong> {senderEmail}</div>
+                    <div><strong>تاريخ وتوقيت الاختبار:</strong> {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC</div>
+                </div>
+                <p style=""font-size: 12px; color: #94a3b8; text-align: center;"">تم إنشاء وإرسال هذا البريد تلقائياً من خادم التطبيق المركزي.</p>
+            </div>";
+
+        var (success, error) = await TrySendSmtpEmailAsync(testRecipientEmail, "مسؤول النظام", subject, bodyHtml);
+        if (success)
+        {
+            return (true, $"تم إرسال بريد الاختبار بنجاح إلى ({testRecipientEmail}) عبر خادم ({host})", null);
+        }
+        else
+        {
+            return (false, "فشل إرسال بريد الاختبار عبر SMTP", error);
+        }
+    }
+
+    private async Task<(bool Success, string? ErrorMessage)> TrySendSmtpEmailAsync(string recipientEmail, string recipientName, string subject, string htmlContent)
     {
         try
         {
             var host = _config["SmtpSettings:Host"];
             var portStr = _config["SmtpSettings:Port"];
             var enableSsl = bool.TryParse(_config["SmtpSettings:EnableSsl"], out var ssl) && ssl;
-            var userName = _config["SmtpSettings:UserName"];
-            var password = _config["SmtpSettings:Password"];
-            var senderEmail = _config["SmtpSettings:SenderEmail"] ?? "no-reply@aup.edu.eg";
+            var rawUserName = _config["SmtpSettings:UserName"];
+            var rawPassword = _config["SmtpSettings:Password"];
+            var senderEmail = _config["SmtpSettings:SenderEmail"] ?? "ahta601@gmail.com";
             var senderName = _config["SmtpSettings:SenderName"] ?? "مطبعة جامعة أسيوط المركزية";
+
+            // Auto-Healing for Gmail and standard SMTP:
+            // If UserName is empty or does not contain '@' (e.g., 'Ahmed_mohamed_refaat'),
+            // automatically fallback to senderEmail ('ahta601@gmail.com') to ensure Gmail authentication succeeds!
+            var userName = (!string.IsNullOrWhiteSpace(rawUserName) && rawUserName.Contains("@"))
+                ? rawUserName.Trim()
+                : senderEmail.Trim();
+
+            // Auto-sanitizing: strip any spaces from Google App Password (e.g. 'bkyz ppec csjg uuze' -> 'bkyzppeccsjgouze')
+            var password = rawPassword?.Replace(" ", "").Trim();
 
             if (string.IsNullOrWhiteSpace(host) || string.IsNullOrWhiteSpace(userName) || string.IsNullOrWhiteSpace(password))
             {
-                _logger.LogInformation("[SMTP SKIPPED] Host, UserName or Password not configured in appsettings.json. Credentials logged safely to console/database.");
-                return;
+                var missing = $"Host: {(string.IsNullOrWhiteSpace(host) ? "مفقود" : "متوفر")}, UserName: {(string.IsNullOrWhiteSpace(userName) ? "مفقود" : "متوفر")}, Password: {(string.IsNullOrWhiteSpace(password) ? "مفقود" : "متوفر")}";
+                _logger.LogWarning("[SMTP SKIPPED] Host, UserName or Password not configured properly: {Missing}", missing);
+                return (false, $"إعدادات SMTP غير مكتملة: {missing}");
             }
 
             int port = 587;
@@ -116,7 +162,7 @@ public class EmailService : IEmailService
             {
                 EnableSsl = enableSsl,
                 Credentials = new NetworkCredential(userName, password),
-                Timeout = 10000
+                Timeout = 15000
             };
 
             var message = new MailMessage
@@ -131,11 +177,13 @@ public class EmailService : IEmailService
             message.To.Add(new MailAddress(recipientEmail, recipientName, Encoding.UTF8));
 
             await client.SendMailAsync(message);
-            _logger.LogInformation("[SMTP SUCCESS] Email successfully sent to {Email}", recipientEmail);
+            _logger.LogInformation("[SMTP SUCCESS] Email successfully dispatched to {Email}", recipientEmail);
+            return (true, null);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning("[SMTP WARNING] Could not dispatch email via SMTP ({Message}). The user can still log in using the initial code displayed in the admin UI / logs.", ex.Message);
+            _logger.LogError(ex, "[SMTP FAILURE] Could not dispatch email via SMTP ({Message})", ex.Message);
+            return (false, ex.Message);
         }
     }
 }
