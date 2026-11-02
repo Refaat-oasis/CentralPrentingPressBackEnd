@@ -234,7 +234,7 @@ public class PdfExportService
 
                     // Financial Cascade 2: م. تشغيل الخامات
                     // Right: م. تشغيل الخامات
-                    table.Cell().Border(0.5f).Padding(1).AlignRight().Text("م. تشغيل الخامات (5.5%)").Bold();
+                    table.Cell().Border(0.5f).Padding(1).AlignRight().Text($"م. تشغيل الخامات ({m.SelectedMaterialProcessingPercent}%)").Bold();
                     table.Cell().Border(0.5f).Padding(1).Text("");
                     RenderEmptyCells(table, 2);
                     RenderPoundPiaster(table, m.MaterialProcessingFee);
@@ -267,7 +267,7 @@ public class PdfExportService
                     RenderPoundPiaster(table, m.SubTotal1, isBold: true);
 
                     // Cascade 6: مصروفات إدارية
-                    table.Cell().Border(0.5f).Padding(1).AlignRight().Text($"مصروفات إدارية {(m.ApplyAdminExpenses ? "(8.5%)" : "")}").Bold();
+                    table.Cell().Border(0.5f).Padding(1).AlignRight().Text($"مصروفات إدارية {(m.ApplyAdminExpenses ? $"({m.SelectedAdminExpensesPercent}%)" : "")}").Bold();
                     RenderEmptyCells(table, 3);
                     RenderPoundPiaster(table, m.AdminExpenses, showDashIfZero: !m.ApplyAdminExpenses);
                     RenderEmptyCells(table, 2);
@@ -289,13 +289,13 @@ public class PdfExportService
                     RenderPoundPiaster(table, m.TotalAfterMarkup, isBold: true);
 
                     // Cascade 10: وزارة المالية
-                    table.Cell().Border(0.5f).Padding(1).AlignRight().Text("وزارة المالية (15%)").Bold();
+                    table.Cell().Border(0.5f).Padding(1).AlignRight().Text($"وزارة المالية ({m.SelectedMinistryOfFinancePercent}%)").Bold();
                     RenderEmptyCells(table, 3);
                     RenderPoundPiaster(table, m.MinistryOfFinanceFee);
                     RenderEmptyCells(table, 2);
 
                     // Cascade 11: ص.ت.العاملين
-                    table.Cell().Border(0.5f).Padding(1).AlignRight().Text("ص.ت.العاملين (10%)").Bold();
+                    table.Cell().Border(0.5f).Padding(1).AlignRight().Text($"ص.ت.العاملين ({m.SelectedWorkersFundPercent}%)").Bold();
                     RenderEmptyCells(table, 3);
                     RenderPoundPiaster(table, m.WorkersSyndicateFund);
                     RenderEmptyCells(table, 2);
@@ -306,7 +306,7 @@ public class PdfExportService
                     RenderPoundPiaster(table, m.SubTotal2, isBold: true);
 
                     // Cascade 13: أخرى
-                    table.Cell().Border(0.5f).Padding(1).AlignRight().Text($"أخرى {(m.ApplyOther ? "(10%)" : "")}").Bold();
+                    table.Cell().Border(0.5f).Padding(1).AlignRight().Text($"أخرى {(m.ApplyOther ? $"({m.SelectedOtherPercent}%)" : "")}").Bold();
                     RenderEmptyCells(table, 3);
                     RenderPoundPiaster(table, m.OtherAmount, showDashIfZero: !m.ApplyOther);
                     RenderEmptyCells(table, 2);

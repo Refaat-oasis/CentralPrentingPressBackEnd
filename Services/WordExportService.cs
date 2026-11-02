@@ -101,7 +101,7 @@ public class WordExportService
             table.AppendChild(CreateCascadeWordRow("الإجمالي (1)", null, m.SubTotal1, isBold: true));
 
             // Cascade 6: Admin Expenses
-            table.AppendChild(CreateCascadeWordRow($"مصروفات إدارية {(m.ApplyAdminExpenses ? $\"({m.SelectedAdminExpensesPercent}%)\" : \"\")}", m.ApplyAdminExpenses ? m.AdminExpenses : null, null));
+            table.AppendChild(CreateCascadeWordRow($"مصروفات إدارية {(m.ApplyAdminExpenses ? $"({m.SelectedAdminExpensesPercent}%)" : "")}", m.ApplyAdminExpenses ? m.AdminExpenses : null, null));
 
             // Cascade 7: Total Expenses
             table.AppendChild(CreateCascadeWordRow("إجمالي المصروفات", null, m.TotalExpenses, isBold: true));
@@ -123,14 +123,14 @@ public class WordExportService
 
             // Cascade 13: Other
             if (m.ApplyOther)
-                table.AppendChild(CreateCascadeWordRow($"أخرى {(m.ApplyOther ? $\"({m.SelectedOtherPercent}%)\" : \"\")}", m.OtherAmount, null));
+                table.AppendChild(CreateCascadeWordRow($"أخرى {(m.ApplyOther ? $"({m.SelectedOtherPercent}%)" : "")}", m.OtherAmount, null));
 
             // Cascade 14: Subtotal 3
             table.AppendChild(CreateCascadeWordRow("إجمالي (3)", null, m.SubTotal3, isBold: true));
 
             // Cascade 15: VAT
             if (m.ApplyVat)
-                table.AppendChild(CreateCascadeWordRow($"ض. القيمة المضافة {(m.ApplyVat ? $\"({m.SelectedVatPercent}%)\" : \"\")}", m.VatAmount, null));
+                table.AppendChild(CreateCascadeWordRow($"ض. القيمة المضافة {(m.ApplyVat ? $"({m.SelectedVatPercent}%)" : "")}", m.VatAmount, null));
 
             // Final Grand Total
             table.AppendChild(CreateCascadeWordRow("القيمة الإجمالية النهائية", null, m.FinalGrandTotal, isBold: true));
