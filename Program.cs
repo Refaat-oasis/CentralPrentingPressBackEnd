@@ -170,6 +170,7 @@ if (app.Environment.IsDevelopment() || true)
 }
 
 app.UseAuthentication();
+app.UseMiddleware<CentralPress.API.Middleware.UserSessionValidationMiddleware>();
 app.UseAuthorization();
 
 app.MapControllers();

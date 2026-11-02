@@ -34,5 +34,12 @@ public class ApplicationUser : IdentityUser
 
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
 
+    [MaxLength(100)]
+    public string? CurrentSessionId { get; set; }
+
+    public DateTime? LastActivityUtc { get; set; }
+
+    public DateTime? SessionStartedUtc { get; set; }
+
     public virtual ICollection<UserPermissionOverride> PermissionOverrides { get; set; } = new List<UserPermissionOverride>();
 }

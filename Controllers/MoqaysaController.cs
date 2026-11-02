@@ -62,7 +62,13 @@ public class MoqaysaController : ControllerBase
         bool ApplyOther,
         bool ApplyVat,
         List<MaterialItemInputDto> MaterialItems,
-        List<MachineryItemInputDto> MachineryItems
+        List<MachineryItemInputDto> MachineryItems,
+        decimal? SelectedMaterialProcessingPercent = null,
+        decimal? SelectedAdminExpensesPercent = null,
+        decimal? SelectedMinistryOfFinancePercent = null,
+        decimal? SelectedWorkersFundPercent = null,
+        decimal? SelectedOtherPercent = null,
+        decimal? SelectedVatPercent = null
     );
 
     [HttpPost("calculate-preview")]
@@ -167,6 +173,12 @@ public class MoqaysaController : ControllerBase
             }).ToList(),
             m.RawMaterials,
             m.MaterialProcessingFee,
+            m.SelectedMaterialProcessingPercent,
+            m.SelectedAdminExpensesPercent,
+            m.SelectedMinistryOfFinancePercent,
+            m.SelectedWorkersFundPercent,
+            m.SelectedOtherPercent,
+            m.SelectedVatPercent,
             m.FilmsProcessingFee,
             m.TotalMaterials,
             m.TotalWorkerWages,
@@ -217,6 +229,7 @@ public class MoqaysaController : ControllerBase
             SpecificationsText = dto.SpecificationsText?.Trim() ?? "",
 
             RawMaterials = calc.RawMaterials,
+            SelectedMaterialProcessingPercent = calc.SelectedMaterialProcessingPercent,
             MaterialProcessingFee = calc.MaterialProcessingFee,
             FilmsProcessingFee = calc.FilmsProcessingFee,
             TotalMaterials = calc.TotalMaterials,
@@ -224,19 +237,24 @@ public class MoqaysaController : ControllerBase
             TotalMachineCosts = calc.TotalMachineCosts,
             SubTotal1 = calc.SubTotal1,
             ApplyAdminExpenses = calc.ApplyAdminExpenses,
+            SelectedAdminExpensesPercent = calc.SelectedAdminExpensesPercent,
             AdminExpenses = calc.AdminExpenses,
             TotalExpenses = calc.TotalExpenses,
             ApplyMarkup = calc.ApplyMarkup,
             SelectedMarkupPercent = calc.SelectedMarkupPercent,
             MarkupAmount = calc.MarkupAmount,
             TotalAfterMarkup = calc.TotalAfterMarkup,
+            SelectedMinistryOfFinancePercent = calc.SelectedMinistryOfFinancePercent,
             MinistryOfFinanceFee = calc.MinistryOfFinanceFee,
+            SelectedWorkersFundPercent = calc.SelectedWorkersFundPercent,
             WorkersSyndicateFund = calc.WorkersSyndicateFund,
             SubTotal2 = calc.SubTotal2,
             ApplyOther = calc.ApplyOther,
+            SelectedOtherPercent = calc.SelectedOtherPercent,
             OtherAmount = calc.OtherAmount,
             SubTotal3 = calc.SubTotal3,
             ApplyVat = calc.ApplyVat,
+            SelectedVatPercent = calc.SelectedVatPercent,
             VatAmount = calc.VatAmount,
             FinalGrandTotal = calc.FinalGrandTotal,
 
@@ -306,6 +324,7 @@ public class MoqaysaController : ControllerBase
         moqaysa.SpecificationsText = dto.SpecificationsText?.Trim() ?? "";
 
         moqaysa.RawMaterials = calc.RawMaterials;
+        moqaysa.SelectedMaterialProcessingPercent = calc.SelectedMaterialProcessingPercent;
         moqaysa.MaterialProcessingFee = calc.MaterialProcessingFee;
         moqaysa.FilmsProcessingFee = calc.FilmsProcessingFee;
         moqaysa.TotalMaterials = calc.TotalMaterials;
@@ -313,19 +332,24 @@ public class MoqaysaController : ControllerBase
         moqaysa.TotalMachineCosts = calc.TotalMachineCosts;
         moqaysa.SubTotal1 = calc.SubTotal1;
         moqaysa.ApplyAdminExpenses = calc.ApplyAdminExpenses;
+        moqaysa.SelectedAdminExpensesPercent = calc.SelectedAdminExpensesPercent;
         moqaysa.AdminExpenses = calc.AdminExpenses;
         moqaysa.TotalExpenses = calc.TotalExpenses;
         moqaysa.ApplyMarkup = calc.ApplyMarkup;
         moqaysa.SelectedMarkupPercent = calc.SelectedMarkupPercent;
         moqaysa.MarkupAmount = calc.MarkupAmount;
         moqaysa.TotalAfterMarkup = calc.TotalAfterMarkup;
+        moqaysa.SelectedMinistryOfFinancePercent = calc.SelectedMinistryOfFinancePercent;
         moqaysa.MinistryOfFinanceFee = calc.MinistryOfFinanceFee;
+        moqaysa.SelectedWorkersFundPercent = calc.SelectedWorkersFundPercent;
         moqaysa.WorkersSyndicateFund = calc.WorkersSyndicateFund;
         moqaysa.SubTotal2 = calc.SubTotal2;
         moqaysa.ApplyOther = calc.ApplyOther;
+        moqaysa.SelectedOtherPercent = calc.SelectedOtherPercent;
         moqaysa.OtherAmount = calc.OtherAmount;
         moqaysa.SubTotal3 = calc.SubTotal3;
         moqaysa.ApplyVat = calc.ApplyVat;
+        moqaysa.SelectedVatPercent = calc.SelectedVatPercent;
         moqaysa.VatAmount = calc.VatAmount;
         moqaysa.FinalGrandTotal = calc.FinalGrandTotal;
 
@@ -440,13 +464,13 @@ public class MoqaysaController : ControllerBase
             ApplyOther = dto.ApplyOther,
             ApplyVat = dto.ApplyVat,
 
-            MaterialProcessingPercent = matProcCfg?.DefaultPercentage ?? 5.5m,
-            AdminExpensesPercent = adminExpCfg?.DefaultPercentage ?? 8.5m,
-            MinistryOfFinancePercent = mofCfg?.DefaultPercentage ?? 15.0m,
-            WorkersFundPercent = workersCfg?.DefaultPercentage ?? 10.0m,
+            MaterialProcessingPercent = dto.SelectedMaterialProcessingPercent ?? matProcCfg?.DefaultPercentage ?? 5.5m,
+            AdminExpensesPercent = dto.SelectedAdminExpensesPercent ?? adminExpCfg?.DefaultPercentage ?? 8.5m,
+            MinistryOfFinancePercent = dto.SelectedMinistryOfFinancePercent ?? mofCfg?.DefaultPercentage ?? 15.0m,
+            WorkersFundPercent = dto.SelectedWorkersFundPercent ?? workersCfg?.DefaultPercentage ?? 10.0m,
             WorkersFundBaseMode = workersCfg?.WorkersFundBaseMode ?? "DiffTotalMinusMaterials",
-            OtherPercent = otherCfg?.DefaultPercentage ?? 10.0m,
-            VatPercent = vatCfg?.DefaultPercentage ?? 14.0m
+            OtherPercent = dto.SelectedOtherPercent ?? otherCfg?.DefaultPercentage ?? 10.0m,
+            VatPercent = dto.SelectedVatPercent ?? vatCfg?.DefaultPercentage ?? 14.0m
         };
 
         return _calculationService.Calculate(input);

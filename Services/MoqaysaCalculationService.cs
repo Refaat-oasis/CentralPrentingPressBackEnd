@@ -50,6 +50,13 @@ public class MoqaysaCalculationResult
     public bool ApplyVat { get; set; }                     // 40. اختياري
     public decimal VatAmount { get; set; }                 // 40. ض. القيمة المضافة (14%)
     public decimal FinalGrandTotal { get; set; }           // 41. القيمة الإجمالية
+
+    public decimal SelectedMaterialProcessingPercent { get; set; } = 5.5m;
+    public decimal SelectedAdminExpensesPercent { get; set; } = 8.5m;
+    public decimal SelectedMinistryOfFinancePercent { get; set; } = 15.0m;
+    public decimal SelectedWorkersFundPercent { get; set; } = 10.0m;
+    public decimal SelectedOtherPercent { get; set; } = 10.0m;
+    public decimal SelectedVatPercent { get; set; } = 14.0m;
 }
 
 public class MoqaysaCalculationService
@@ -62,7 +69,13 @@ public class MoqaysaCalculationService
         var res = new MoqaysaCalculationResult
         {
             RawMaterials = Round2(input.RawMaterials),
-            FilmsProcessingFee = Round2(input.FilmsProcessingFee)
+            FilmsProcessingFee = Round2(input.FilmsProcessingFee),
+            SelectedMaterialProcessingPercent = input.MaterialProcessingPercent,
+            SelectedAdminExpensesPercent = input.AdminExpensesPercent,
+            SelectedMinistryOfFinancePercent = input.MinistryOfFinancePercent,
+            SelectedWorkersFundPercent = input.WorkersFundPercent,
+            SelectedOtherPercent = input.OtherPercent,
+            SelectedVatPercent = input.VatPercent
         };
 
         // 28. م. تشغيل الخامات (5.5%)

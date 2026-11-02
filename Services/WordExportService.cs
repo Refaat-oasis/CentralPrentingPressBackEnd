@@ -76,21 +76,21 @@ public class WordExportService
             // Add Header Row
             table.AppendChild(CreateTableRow("البيــــــــان", "القيمة (جنيه)", true));
             table.AppendChild(CreateTableRow("الخامات", $"{m.RawMaterials:F2}"));
-            table.AppendChild(CreateTableRow("م. تشغيل الخامات (5.5%)", $"{m.MaterialProcessingFee:F2}"));
+            table.AppendChild(CreateTableRow($"م. تشغيل الخامات ({m.SelectedMaterialProcessingPercent}%)", $"{m.MaterialProcessingFee:F2}"));
             table.AppendChild(CreateTableRow("جملة الخامات", $"{m.TotalMaterials:F2}"));
             table.AppendChild(CreateTableRow("جملة أجور العمال", $"{m.TotalWorkerWages:F2}"));
             table.AppendChild(CreateTableRow("جملة م. الآلات", $"{m.TotalMachineCosts:F2}"));
             table.AppendChild(CreateTableRow("الإجمالي (1)", $"{m.SubTotal1:F2}"));
-            if (m.ApplyAdminExpenses) table.AppendChild(CreateTableRow("مصروفات إدارية (8.5%)", $"{m.AdminExpenses:F2}"));
+            if (m.ApplyAdminExpenses) table.AppendChild(CreateTableRow($"مصروفات إدارية ({m.SelectedAdminExpensesPercent}%)", $"{m.AdminExpenses:F2}"));
             table.AppendChild(CreateTableRow("إجمالي المصروفات", $"{m.TotalExpenses:F2}"));
             if (m.ApplyMarkup) table.AppendChild(CreateTableRow($"النسبة ({m.SelectedMarkupPercent}%)", $"{m.MarkupAmount:F2}"));
             table.AppendChild(CreateTableRow("الجملة", $"{m.TotalAfterMarkup:F2}"));
-            table.AppendChild(CreateTableRow("وزارة المالية (15%)", $"{m.MinistryOfFinanceFee:F2}"));
-            table.AppendChild(CreateTableRow("ص. ت. العاملين (10%)", $"{m.WorkersSyndicateFund:F2}"));
+            table.AppendChild(CreateTableRow($"وزارة المالية ({m.SelectedMinistryOfFinancePercent}%)", $"{m.MinistryOfFinanceFee:F2}"));
+            table.AppendChild(CreateTableRow($"ص. ت. العاملين ({m.SelectedWorkersFundPercent}%)", $"{m.WorkersSyndicateFund:F2}"));
             table.AppendChild(CreateTableRow("الإجمالي (2)", $"{m.SubTotal2:F2}"));
-            if (m.ApplyOther) table.AppendChild(CreateTableRow("أخرى (10%)", $"{m.OtherAmount:F2}"));
+            if (m.ApplyOther) table.AppendChild(CreateTableRow($"أخرى ({m.SelectedOtherPercent}%)", $"{m.OtherAmount:F2}"));
             table.AppendChild(CreateTableRow("إجمالي (3)", $"{m.SubTotal3:F2}"));
-            if (m.ApplyVat) table.AppendChild(CreateTableRow("ض. القيمة المضافة (14%)", $"{m.VatAmount:F2}"));
+            if (m.ApplyVat) table.AppendChild(CreateTableRow($"ض. القيمة المضافة ({m.SelectedVatPercent}%)", $"{m.VatAmount:F2}"));
             table.AppendChild(CreateTableRow("القيمة الإجمالية النهائية", $"{m.FinalGrandTotal:F2}", isBold: true));
 
             body.Append(table);

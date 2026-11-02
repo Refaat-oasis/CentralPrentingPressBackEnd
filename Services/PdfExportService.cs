@@ -66,21 +66,21 @@ public class PdfExportService
                         }
 
                         AddRow("الخامات", m.RawMaterials);
-                        AddRow("م. تشغيل الخامات (5.5%)", m.MaterialProcessingFee);
+                        AddRow($"م. تشغيل الخامات ({m.SelectedMaterialProcessingPercent}%)", m.MaterialProcessingFee);
                         AddRow("جملة الخامات", m.TotalMaterials);
                         AddRow("جملة أجور العمال", m.TotalWorkerWages);
                         AddRow("جملة م. الآلات", m.TotalMachineCosts);
                         AddRow("الإجمالي (1)", m.SubTotal1);
-                        if (m.ApplyAdminExpenses) AddRow("مصروفات إدارية (8.5%)", m.AdminExpenses);
+                        if (m.ApplyAdminExpenses) AddRow($"مصروفات إدارية ({m.SelectedAdminExpensesPercent}%)", m.AdminExpenses);
                         AddRow("إجمالي المصروفات", m.TotalExpenses);
                         if (m.ApplyMarkup) AddRow($"النسبة ({m.SelectedMarkupPercent}%)", m.MarkupAmount);
                         AddRow("الجملة", m.TotalAfterMarkup);
-                        AddRow("وزارة المالية (15%)", m.MinistryOfFinanceFee);
-                        AddRow("ص. ت. العاملين (10%)", m.WorkersSyndicateFund);
+                        AddRow($"وزارة المالية ({m.SelectedMinistryOfFinancePercent}%)", m.MinistryOfFinanceFee);
+                        AddRow($"ص. ت. العاملين ({m.SelectedWorkersFundPercent}%)", m.WorkersSyndicateFund);
                         AddRow("الإجمالي (2)", m.SubTotal2);
-                        if (m.ApplyOther) AddRow("أخرى (10%)", m.OtherAmount);
+                        if (m.ApplyOther) AddRow($"أخرى ({m.SelectedOtherPercent}%)", m.OtherAmount);
                         AddRow("إجمالي (3)", m.SubTotal3);
-                        if (m.ApplyVat) AddRow("ض. القيمة المضافة (14%)", m.VatAmount);
+                        if (m.ApplyVat) AddRow($"ض. القيمة المضافة ({m.SelectedVatPercent}%)", m.VatAmount);
                         AddRow("القيمة الإجمالية النهائية", m.FinalGrandTotal, isBold: true);
                     });
                 });

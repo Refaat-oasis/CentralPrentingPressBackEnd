@@ -62,7 +62,14 @@ public class AuthController : ControllerBase
         if (!passwordValid)
             return Unauthorized(new { message = "كلمة المرور غير صحيحة" });
 
-        string token = GenerateJwtToken(user, isSuperAdmin: false);
+        // Generate new unique session ID
+        var sessionId = Guid.NewGuid().ToString();
+        user.CurrentSessionId = sessionId;
+        user.LastActivityUtc = DateTime.UtcNow;
+        user.SessionStartedUtc = DateTime.UtcNow;
+        await _userManager.UpdateAsync(user);
+
+        string token = GenerateJwtToken(user, isSuperAdmin: false, sessionId: sessionId);
         var permissions = await _permissionService.GetUserPermissionsAsync(user.Id);
 
         return Ok(new
@@ -209,7 +216,7 @@ public class AuthController : ControllerBase
         });
     }
 
-    private string GenerateJwtToken(ApplicationUser user, bool isSuperAdmin)
+    private string GenerateJwtToken(ApplicationUser user, bool isSuperAdmin, string? sessionId = null)
     {
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(
             _configuration["JwtSettings:SecurityKey"] ?? "ASSIUT_UNIV_CENTRAL_PRESS_JWT_KEY_SUPER_SECRET_1234567890!@#$%"));
@@ -222,6 +229,7 @@ public class AuthController : ControllerBase
             new Claim("EmployeeCode", user.EmployeeCode ?? ""),
             new Claim("FullName", user.FullName ?? ""),
             new Claim("JobTitle", user.JobTitle?.TitleNameAr ?? ""),
+            new Claim("SessionId", sessionId ?? user.CurrentSessionId ?? ""),
             new Claim(ClaimTypes.Role, isSuperAdmin ? "SuperAdmin" : "Employee")
         };
 
@@ -234,5 +242,72 @@ public class AuthController : ControllerBase
         );
 
         return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+
+    [Authorize]
+    [HttpPost("logout")]
+    public async Task<IActionResult> Logout()
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!string.IsNullOrEmpty(userId) && !User.IsInRole("SuperAdmin"))
+        {
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user != null)
+            {
+                user.CurrentSessionId = null;
+                user.LastActivityUtc = null;
+                await _userManager.UpdateAsync(user);
+            }
+        }
+
+        return Ok(new { message = "تم تسجيل الخروج بنجاح وتحرير الجلسة" });
+    }
+
+    [HttpPost("terminate-session")]
+    public async Task<IActionResult> TerminateSession([FromQuery] string? token)
+    {
+        var tokenStr = token;
+        if (string.IsNullOrEmpty(tokenStr) && Request.Headers.TryGetValue("Authorization", out var authHeader))
+        {
+            tokenStr = authHeader.ToString().Replace("Bearer ", "").Trim();
+        }
+
+        if (!string.IsNullOrEmpty(tokenStr))
+        {
+            try
+            {
+                var handler = new JwtSecurityTokenHandler();
+                if (handler.CanReadToken(tokenStr))
+                {
+                    var jwt = handler.ReadJwtToken(tokenStr);
+                    var userId = jwt.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier || c.Type == "sub")?.Value;
+                    var sessionId = jwt.Claims.FirstOrDefault(c => c.Type == "SessionId")?.Value;
+
+                    if (!string.IsNullOrEmpty(userId))
+                    {
+                        var user = await _userManager.FindByIdAsync(userId);
+                        if (user != null && (sessionId == null || user.CurrentSessionId == sessionId))
+                        {
+                            user.CurrentSessionId = null;
+                            user.LastActivityUtc = null;
+                            await _userManager.UpdateAsync(user);
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // Ignore any error during browser unload
+            }
+        }
+
+        return Ok(new { terminated = true });
+    }
+
+    [Authorize]
+    [HttpGet("heartbeat")]
+    public IActionResult Heartbeat()
+    {
+        return Ok(new { active = true });
     }
 }

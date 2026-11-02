@@ -190,6 +190,9 @@ public class TasweyaController : ControllerBase
         if (string.IsNullOrWhiteSpace(dto.SettlementNumber))
             return BadRequest(new { message = "يرجى كتابة رقم التسوية" });
 
+        if (string.IsNullOrWhiteSpace(dto.ClaimNumber) || !System.Text.RegularExpressions.Regex.IsMatch(dto.ClaimNumber.Trim(), @"^\d+$"))
+            return BadRequest(new { message = "رقم المطالبة يجب أن يتكون من أرقام فقط" });
+
         if (dto.MoqaysaIds == null || dto.MoqaysaIds.Count == 0)
             return BadRequest(new { message = "يرجى تحديد مقايسة واحدة على الأقل لإدراجها في كشف التسوية" });
 
@@ -247,7 +250,7 @@ public class TasweyaController : ControllerBase
             SettlementDate = dto.SettlementDate,
             AccountId = dto.AccountId,
             CustomerId = dto.CustomerId,
-            ClaimNumber = string.IsNullOrWhiteSpace(dto.ClaimNumber) ? dto.SettlementNumber.Trim() : dto.ClaimNumber.Trim(),
+            ClaimNumber = dto.ClaimNumber.Trim(),
             JobOrderNumbersText = jobOrders,
 
             TotalMaterialsSum = totalMat,
