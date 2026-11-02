@@ -42,6 +42,7 @@ public class AuthController : ControllerBase
 
     public record LoginDto(string Identifier, string Password);
     public record ChangePasswordDto(string CurrentPassword, string NewPassword);
+    public record UpdateProfileDto(string FullName);
     public record ForgotPasswordDto(string Email);
     public record VerifyResetCodeDto(string Email, string Code);
     public record ResetPasswordDto(string Email, string Code, string NewPassword);
@@ -60,7 +61,7 @@ public class AuthController : ControllerBase
 
         bool passwordValid = await _userManager.CheckPasswordAsync(user, dto.Password);
         if (!passwordValid)
-            return Unauthorized(new { message = "كلمة المرور غير صحيحة" });
+            return Unauthorized(new { message = "بيانات الدخول غير صحيحة" });
 
         // Generate new unique session ID
         var sessionId = Guid.NewGuid().ToString();
@@ -111,6 +112,44 @@ public class AuthController : ControllerBase
         return Ok(new { message = "تم تغيير كلمة المرور بنجاح" });
     }
 
+    [Authorize]
+    [HttpPut("profile")]
+    public async Task<IActionResult> UpdateProfile([FromBody] UpdateProfileDto dto)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(userId)) return Unauthorized();
+
+        var user = await _userManager.FindByIdAsync(userId);
+        if (user == null) return NotFound(new { message = "المستخدم غير موجود" });
+
+        if (string.IsNullOrWhiteSpace(dto.FullName))
+            return BadRequest(new { message = "الاسم الكامل مطلوب" });
+
+        user.FullName = dto.FullName.Trim();
+        var result = await _userManager.UpdateAsync(user);
+        if (!result.Succeeded)
+            return BadRequest(new { message = string.Join(", ", result.Errors.Select(e => e.Description)) });
+
+        var jobTitle = user.JobTitleId.HasValue ? await _context.JobTitles.FindAsync(user.JobTitleId) : null;
+
+        return Ok(new
+        {
+            message = "تم تحديث الملف الشخصي بنجاح",
+            user = new
+            {
+                user.Id,
+                user.EmployeeCode,
+                user.FullName,
+                user.Email,
+                user.PhotoUrl,
+                user.JobTitleId,
+                JobTitleName = jobTitle?.TitleNameAr,
+                user.MustChangePassword,
+                IsSuperAdmin = false
+            }
+        });
+    }
+
     [HttpPost("forgot-password")]
     public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordDto dto)
     {
@@ -126,9 +165,19 @@ public class AuthController : ControllerBase
         user.PasswordResetCodeExpiryUtc = DateTime.UtcNow.AddMinutes(15);
         await _userManager.UpdateAsync(user);
 
-        await _emailService.SendPasswordResetCodeAsync(user.Email!, user.FullName, code);
+        var (emailSent, emailError) = await _emailService.SendPasswordResetCodeAsync(user.Email!, user.FullName, code);
 
-        return Ok(new { message = "تم إرسال رمز التحقق بنجاح إلى البريد الإلكتروني" });
+        if (!emailSent)
+        {
+            return Ok(new 
+            { 
+                message = "تم توليد رمز التحقق، ولكن تعذر تسليمه للبريد الإلكتروني (يرجى مراجعة إعدادات خادم البريد SMTP)", 
+                emailSent = false,
+                emailError 
+            });
+        }
+
+        return Ok(new { message = "تم إرسال رمز التحقق بنجاح إلى البريد الإلكتروني", emailSent = true });
     }
 
     [HttpPost("verify-reset-code")]

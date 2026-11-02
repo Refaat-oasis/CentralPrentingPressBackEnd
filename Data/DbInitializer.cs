@@ -239,6 +239,22 @@ public static class DbInitializer
                 throw new Exception($"Failed to create admin user: {string.Join(", ", createResult.Errors.Select(e => e.Description))}");
             }
         }
+        else
+        {
+            // Auto-heal admin credentials: if password differs from Admin@12345, reset it so administrator is never locked out
+            var isPassValid = await userManager.CheckPasswordAsync(existingAdmin, "Admin@12345");
+            if (!isPassValid)
+            {
+                var resetToken = await userManager.GeneratePasswordResetTokenAsync(existingAdmin);
+                await userManager.ResetPasswordAsync(existingAdmin, resetToken, "Admin@12345");
+            }
+
+            if (!existingAdmin.IsActive)
+            {
+                existingAdmin.IsActive = true;
+                await userManager.UpdateAsync(existingAdmin);
+            }
+        }
 
         // 7. Seed Sample Materials & Customers if empty
         if (!await context.Materials.AnyAsync())

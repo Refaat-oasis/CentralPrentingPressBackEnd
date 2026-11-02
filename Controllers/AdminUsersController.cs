@@ -19,18 +19,23 @@ public class AdminUsersController : ControllerBase
 {
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly ApplicationDbContext _context;
+    private readonly CentralPress.API.Services.IEmailService _emailService;
 
-    public AdminUsersController(UserManager<ApplicationUser> userManager, ApplicationDbContext context)
+    public AdminUsersController(
+        UserManager<ApplicationUser> userManager,
+        ApplicationDbContext context,
+        CentralPress.API.Services.IEmailService emailService)
     {
         _userManager = userManager;
         _context = context;
+        _emailService = emailService;
     }
 
     public record CreateEmployeeDto(
         string EmployeeCode,
         string FullName,
         string Email,
-        string DummyPassword,
+        string? DummyPassword,
         int? JobTitleId,
         string? PhotoUrl
     );
@@ -49,6 +54,10 @@ public class AdminUsersController : ControllerBase
         bool? CanCreate,
         bool? CanUpdate,
         bool? CanToggleActive
+    );
+
+    public record SaveOverridesDto(
+        List<PermissionOverrideInputDto>? Overrides
     );
 
     [HttpGet]
@@ -102,12 +111,23 @@ public class AdminUsersController : ControllerBase
             CreatedAtUtc = DateTime.UtcNow
         };
 
-        var password = string.IsNullOrWhiteSpace(dto.DummyPassword) ? "Aup@12345" : dto.DummyPassword;
+        var code = "Aup@" + Random.Shared.Next(100000, 999999).ToString();
+        var password = string.IsNullOrWhiteSpace(dto.DummyPassword) ? code : dto.DummyPassword;
         var result = await _userManager.CreateAsync(user, password);
         if (!result.Succeeded)
             return BadRequest(new { message = string.Join(", ", result.Errors.Select(e => e.Description)) });
 
-        return Ok(new { message = "تمت إضافة الموظف بنجاح بكلمة مرور مبدئية", userId = user.Id });
+        var (emailSent, emailErr) = await _emailService.SendNewUserInvitationCodeAsync(user.Email, user.FullName, user.EmployeeCode, password);
+
+        return Ok(new
+        {
+            message = emailSent
+                ? "تمت إضافة الموظف بنجاح وإرسال رمز الدخول المبدئي إلى بريده الإلكتروني"
+                : "تمت إضافة الموظف بنجاح، ولكن تعذر تسليم البريد الإلكتروني (يمكن استخدام رمز الدخول المبدئي أدناه)",
+            userId = user.Id,
+            initialCode = password,
+            emailSent
+        });
     }
 
     [HttpPut("{id}")]
@@ -165,9 +185,10 @@ public class AdminUsersController : ControllerBase
         return Ok(overrides);
     }
 
+    [HttpPut("{id}/overrides")]
     [HttpPost("{id}/overrides")]
     [PermissionAuthorize("EMPLOYEES", "CanUpdate")]
-    public async Task<IActionResult> SaveUserPermissionOverrides(string id, [FromBody] List<PermissionOverrideInputDto> overrides)
+    public async Task<IActionResult> SaveUserPermissionOverrides(string id, [FromBody] SaveOverridesDto dto)
     {
         var user = await _userManager.FindByIdAsync(id);
         if (user == null) return NotFound(new { message = "الموظف غير موجود" });
@@ -175,20 +196,108 @@ public class AdminUsersController : ControllerBase
         var existing = await _context.UserPermissionOverrides.Where(o => o.UserId == id).ToListAsync();
         _context.UserPermissionOverrides.RemoveRange(existing);
 
-        foreach (var item in overrides)
+        if (dto.Overrides != null)
         {
-            _context.UserPermissionOverrides.Add(new UserPermissionOverride
+            foreach (var item in dto.Overrides)
             {
-                UserId = id,
-                ModuleId = item.ModuleId,
-                CanAccess = item.CanAccess,
-                CanCreate = item.CanCreate,
-                CanUpdate = item.CanUpdate,
-                CanToggleActive = item.CanToggleActive
-            });
+                _context.UserPermissionOverrides.Add(new UserPermissionOverride
+                {
+                    UserId = id,
+                    ModuleId = item.ModuleId,
+                    CanAccess = item.CanAccess,
+                    CanCreate = item.CanCreate,
+                    CanUpdate = item.CanUpdate,
+                    CanToggleActive = item.CanToggleActive
+                });
+            }
         }
 
         await _context.SaveChangesAsync();
         return Ok(new { message = "تم تحديث الصلاحيات المخصصة للموظف بنجاح" });
+    }
+
+    [HttpPost("{id}/overrides/reset")]
+    [PermissionAuthorize("EMPLOYEES", "CanUpdate")]
+    public async Task<IActionResult> ResetUserPermissionOverrides(string id)
+    {
+        var user = await _userManager.FindByIdAsync(id);
+        if (user == null) return NotFound(new { message = "الموظف غير موجود" });
+
+        var existing = await _context.UserPermissionOverrides.Where(o => o.UserId == id).ToListAsync();
+        _context.UserPermissionOverrides.RemoveRange(existing);
+        await _context.SaveChangesAsync();
+
+        return Ok(new { message = "تمت استعادة الصلاحيات الافتراضية للمسمى الوظيفي بنجاح" });
+    }
+
+    [HttpDelete("{id}")]
+    [PermissionAuthorize("EMPLOYEES", "CanUpdate")]
+    public async Task<IActionResult> DeleteEmployee(string id)
+    {
+        var user = await _userManager.FindByIdAsync(id);
+        if (user == null) return NotFound(new { message = "الموظف غير موجود" });
+
+        if (user.Email == "admin@aup.edu.eg" || user.EmployeeCode == "EMP001")
+            return BadRequest(new { message = "لا يمكن حذف حساب المسؤول الرئيسي للنظام" });
+
+        var overrides = await _context.UserPermissionOverrides.Where(o => o.UserId == id).ToListAsync();
+        if (overrides.Any())
+        {
+            _context.UserPermissionOverrides.RemoveRange(overrides);
+            await _context.SaveChangesAsync();
+        }
+
+        var result = await _userManager.DeleteAsync(user);
+        if (!result.Succeeded)
+            return BadRequest(new { message = string.Join(", ", result.Errors.Select(e => e.Description)) });
+
+        return Ok(new { message = "تم حذف حساب الموظف بنجاح" });
+    }
+
+    [HttpPost("{id}/resend-invitation")]
+    [PermissionAuthorize("EMPLOYEES", "CanCreate")]
+    public async Task<IActionResult> ResendInvitation(string id)
+    {
+        var user = await _userManager.FindByIdAsync(id);
+        if (user == null) return NotFound(new { message = "الموظف غير موجود" });
+
+        var newCode = "Aup@" + Random.Shared.Next(100000, 999999).ToString();
+        var token = await _userManager.GeneratePasswordResetTokenAsync(user);
+        var res = await _userManager.ResetPasswordAsync(user, token, newCode);
+        if (!res.Succeeded)
+            return BadRequest(new { message = string.Join(", ", res.Errors.Select(e => e.Description)) });
+
+        user.MustChangePassword = true;
+        await _userManager.UpdateAsync(user);
+
+        var (emailSent, emailErr) = await _emailService.SendNewUserInvitationCodeAsync(user.Email ?? "", user.FullName ?? "", user.EmployeeCode ?? "", newCode);
+
+        return Ok(new
+        {
+            message = emailSent
+                ? "تمت إعادة إرسال رمز الدخول المبدئي بنجاح إلى البريد الإلكتروني للموظف"
+                : "تم توليد رمز الدخول الجديد ولكن تعذر تسليم البريد الإلكتروني (يمكن نسخ الرمز أدناه)",
+            initialCode = newCode,
+            emailSent
+        });
+    }
+
+    public record TestSmtpRequestDto(string? TargetEmail);
+
+    [HttpPost("test-smtp")]
+    [PermissionAuthorize("EMPLOYEES", "CanAccess")]
+    public async Task<IActionResult> TestSmtp([FromBody] TestSmtpRequestDto? dto)
+    {
+        var target = !string.IsNullOrWhiteSpace(dto?.TargetEmail)
+            ? dto.TargetEmail.Trim()
+            : "ahta601@gmail.com";
+
+        var (success, message, details) = await _emailService.TestSmtpConnectionAsync(target);
+        if (!success)
+        {
+            return BadRequest(new { message, details, success = false });
+        }
+
+        return Ok(new { message, success = true });
     }
 }

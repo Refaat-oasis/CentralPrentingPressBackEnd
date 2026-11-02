@@ -44,10 +44,14 @@ public class PaymentOrdersController : ControllerBase
     [PermissionAuthorize("PAYMENT_ORDERS", "CanAccess")]
     public async Task<IActionResult> GetUnpaidTasweyat([FromQuery] int? accountId, [FromQuery] int? customerId)
     {
+        var activePaymentOrderTasweyaIds = _context.PaymentOrderTasweyaLinks
+            .Where(l => l.PaymentOrder != null && l.PaymentOrder.IsActive)
+            .Select(l => l.TasweyaId);
+
         var query = _context.Tasweyat
             .Include(t => t.Account)
             .Include(t => t.Customer)
-            .Where(t => t.IsActive && !t.IsPaid);
+            .Where(t => t.IsActive && (!t.IsPaid || !activePaymentOrderTasweyaIds.Contains(t.TasweyaId)));
 
         if (accountId.HasValue)
             query = query.Where(t => t.AccountId == accountId.Value);
@@ -68,6 +72,16 @@ public class PaymentOrdersController : ControllerBase
                 t.CustomerId,
                 CustomerNameAr = t.Customer != null ? t.Customer.CustomerNameAr : "غير محدد",
                 t.JobOrderNumbersText,
+                t.TotalMaterialsSum,
+                t.TotalWorkerWagesSum,
+                t.TotalMachineCostsSum,
+                t.AdminExpensesSum,
+                t.MarkupAmountSum,
+                t.MinistryOfFinanceSum,
+                t.WorkersFundSum,
+                t.OtherAmountSum,
+                t.RevenuesTotal,
+                t.VatTotal,
                 t.SettlementGrandTotal,
                 t.TotalAmountInWordsAr,
                 t.CreatedAtUtc
@@ -160,8 +174,19 @@ public class PaymentOrdersController : ControllerBase
         if (tasweyat.Count != dto.TasweyaIds.Count)
             return BadRequest(new { message = "بعض كشوف التسوية المحددة غير موجودة أو غير فعالة" });
 
-        if (tasweyat.Any(t => t.IsPaid))
-            return BadRequest(new { message = "إحدى كشوف التسوية المحددة تم سدادها بالفعل مسبقاً" });
+        var activeConflicts = await _context.PaymentOrderTasweyaLinks
+            .Include(l => l.PaymentOrder)
+            .Include(l => l.Tasweya)
+            .Where(l => dto.TasweyaIds.Contains(l.TasweyaId) && l.PaymentOrder != null && l.PaymentOrder.IsActive)
+            .ToListAsync();
+
+        if (activeConflicts.Any())
+        {
+            var conflictNumbers = string.Join("، ", activeConflicts
+                .Select(c => c.Tasweya != null ? c.Tasweya.SettlementNumber : c.TasweyaId.ToString())
+                .Distinct());
+            return BadRequest(new { message = $"كشوف التسوية التالية مدرجة بالفعل في أمر دفع نشط: ({conflictNumbers})" });
+        }
 
         // Account & customer inference
         int accountId = tasweyat.First().AccountId;
@@ -230,6 +255,89 @@ public class PaymentOrdersController : ControllerBase
         });
     }
 
+    [HttpPut("{id}")]
+    [PermissionAuthorize("PAYMENT_ORDERS", "CanUpdate")]
+    public async Task<IActionResult> Update(int id, [FromBody] CreatePaymentOrderDto dto)
+    {
+        var paymentOrder = await _context.PaymentOrders
+            .Include(p => p.TasweyaLinks)
+            .FirstOrDefaultAsync(p => p.PaymentOrderId == id);
+
+        if (paymentOrder == null) return NotFound(new { message = "أمر الدفع غير موجود" });
+
+        if (paymentOrder.IsConfirmed)
+        {
+            // If already confirmed, allow editing metadata only (PaymentDate, Notes)
+            paymentOrder.PaymentDate = dto.PaymentDate;
+            paymentOrder.Notes = dto.Notes?.Trim();
+            await _context.SaveChangesAsync();
+            return Ok(new { message = "تم تحديث ملاحظات وتاريخ أمر الدفع المؤكد بنجاح" });
+        }
+
+        if (string.IsNullOrWhiteSpace(dto.PaymentOrderNumber))
+            return BadRequest(new { message = "يرجى إدخال رقم أمر الدفع" });
+
+        if (dto.TasweyaIds == null || dto.TasweyaIds.Count == 0)
+            return BadRequest(new { message = "يرجى تحديد كشف تسوية واحد على الأقل" });
+
+        if (await _context.PaymentOrders.AnyAsync(p => p.PaymentOrderNumber == dto.PaymentOrderNumber.Trim() && p.PaymentOrderId != id))
+            return BadRequest(new { message = "رقم أمر الدفع مسجل مسبقاً" });
+
+        var tasweyat = await _context.Tasweyat
+            .Where(t => dto.TasweyaIds.Contains(t.TasweyaId) && t.IsActive)
+            .ToListAsync();
+
+        if (tasweyat.Count != dto.TasweyaIds.Count)
+            return BadRequest(new { message = "بعض كشوف التسوية المحددة غير موجودة أو غير فعالة" });
+
+        var activeConflicts = await _context.PaymentOrderTasweyaLinks
+            .Include(l => l.PaymentOrder)
+            .Include(l => l.Tasweya)
+            .Where(l => dto.TasweyaIds.Contains(l.TasweyaId) 
+                     && l.PaymentOrderId != id 
+                     && l.PaymentOrder != null 
+                     && l.PaymentOrder.IsActive)
+            .ToListAsync();
+
+        if (activeConflicts.Any())
+        {
+            var conflictNumbers = string.Join("، ", activeConflicts
+                .Select(c => c.Tasweya != null ? c.Tasweya.SettlementNumber : c.TasweyaId.ToString())
+                .Distinct());
+            return BadRequest(new { message = $"كشوف التسوية التالية مدرجة بالفعل في أمر دفع نشط آخر: ({conflictNumbers})" });
+        }
+
+        int accountId = tasweyat.First().AccountId;
+        int? customerId = tasweyat.Select(t => t.CustomerId).Distinct().Count() == 1 ? tasweyat.First().CustomerId : null;
+
+        decimal totalPaidAmount = MoqaysaCalculationService.Round2(tasweyat.Sum(t => t.SettlementGrandTotal));
+        string tafqeet = ArabicTafqeetService.ToWords(totalPaidAmount);
+
+        paymentOrder.PaymentOrderNumber = dto.PaymentOrderNumber.Trim();
+        paymentOrder.PaymentDate = dto.PaymentDate;
+        paymentOrder.AccountId = accountId;
+        paymentOrder.CustomerId = customerId;
+        paymentOrder.TotalPaidAmount = totalPaidAmount;
+        paymentOrder.TotalAmountInWordsAr = tafqeet;
+        paymentOrder.Notes = dto.Notes?.Trim();
+
+        _context.PaymentOrderTasweyaLinks.RemoveRange(paymentOrder.TasweyaLinks);
+        paymentOrder.TasweyaLinks.Clear();
+
+        foreach (var t in tasweyat)
+        {
+            paymentOrder.TasweyaLinks.Add(new PaymentOrderTasweyaLink
+            {
+                PaymentOrderId = paymentOrder.PaymentOrderId,
+                TasweyaId = t.TasweyaId,
+                SnapshotTasweyaAmount = t.SettlementGrandTotal
+            });
+        }
+
+        await _context.SaveChangesAsync();
+        return Ok(new { message = "تم حفظ تعديلات أمر الدفع بنجاح", paymentOrderId = paymentOrder.PaymentOrderId });
+    }
+
     [HttpPost("{id}/confirm")]
     [PermissionAuthorize("PAYMENT_ORDERS", "CanUpdate")]
     public async Task<IActionResult> ConfirmPaymentOrder(int id)
@@ -285,13 +393,112 @@ public class PaymentOrdersController : ControllerBase
     [PermissionAuthorize("PAYMENT_ORDERS", "CanToggleActive")]
     public async Task<IActionResult> ToggleActive(int id)
     {
-        var item = await _context.PaymentOrders.FindAsync(id);
+        var item = await _context.PaymentOrders
+            .Include(p => p.TasweyaLinks)
+                .ThenInclude(l => l.Tasweya)
+                    .ThenInclude(t => t!.MoqaysaLinks)
+                        .ThenInclude(ml => ml.Moqaysa)
+            .FirstOrDefaultAsync(p => p.PaymentOrderId == id);
+
         if (item == null) return NotFound(new { message = "أمر الدفع غير موجود" });
 
-        item.IsActive = !item.IsActive;
-        await _context.SaveChangesAsync();
+        bool willBeActive = !item.IsActive;
 
-        return Ok(new { message = item.IsActive ? "تم تفعيل أمر الدفع" : "تم إلغاء تفعيل أمر الدفع", isActive = item.IsActive });
+        if (!willBeActive)
+        {
+            // Deactivating: release all linked Tasweyat and their Moqaysat to be unpaid and free for a new payment order
+            foreach (var link in item.TasweyaLinks)
+            {
+                if (link.Tasweya != null)
+                {
+                    link.Tasweya.IsPaid = false;
+                    link.Tasweya.PaidAtUtc = null;
+
+                    if (link.Tasweya.MoqaysaLinks != null)
+                    {
+                        foreach (var ml in link.Tasweya.MoqaysaLinks)
+                        {
+                            if (ml.Moqaysa != null)
+                            {
+                                ml.Moqaysa.IsPaid = false;
+                                ml.Moqaysa.PaidAtUtc = null;
+                            }
+                        }
+                    }
+                }
+            }
+
+            item.IsActive = false;
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                message = "تم إلغاء تفعيل أمر الدفع بنجاح، وتحرير كافة كشوف التسوية المرتبطة به لتصبح غير مسددة ومتاحة لإصدار أمر دفع جديد",
+                isActive = false
+            });
+        }
+        else
+        {
+            // Re-activating: check if any linked Tasweya is already linked to another ACTIVE Payment Order
+            var tasweyaIds = item.TasweyaLinks.Select(l => l.TasweyaId).ToList();
+
+            var conflictingLinks = await _context.PaymentOrderTasweyaLinks
+                .Include(l => l.PaymentOrder)
+                .Include(l => l.Tasweya)
+                .Where(l => tasweyaIds.Contains(l.TasweyaId)
+                         && l.PaymentOrderId != item.PaymentOrderId
+                         && l.PaymentOrder != null
+                         && l.PaymentOrder.IsActive)
+                .ToListAsync();
+
+            if (conflictingLinks.Any())
+            {
+                var conflictNumbers = string.Join("، ", conflictingLinks
+                    .Select(c => c.Tasweya != null ? c.Tasweya.SettlementNumber : c.TasweyaId.ToString())
+                    .Distinct());
+
+                return BadRequest(new
+                {
+                    message = $"لا يمكن إعادة تفعيل أمر الدفع لأن كشوف التسوية التالية مدرجة بالفعل في أمر دفع نشط آخر: ({conflictNumbers})"
+                });
+            }
+
+            item.IsActive = true;
+
+            // If the payment order was confirmed, re-lock the linked Tasweyat & Moqaysat
+            if (item.IsConfirmed)
+            {
+                var now = DateTime.UtcNow;
+                foreach (var link in item.TasweyaLinks)
+                {
+                    if (link.Tasweya != null)
+                    {
+                        link.Tasweya.IsPaid = true;
+                        link.Tasweya.PaidAtUtc = now;
+
+                        if (link.Tasweya.MoqaysaLinks != null)
+                        {
+                            foreach (var ml in link.Tasweya.MoqaysaLinks)
+                            {
+                                if (ml.Moqaysa != null)
+                                {
+                                    ml.Moqaysa.IsPaid = true;
+                                    ml.Moqaysa.PaidAtUtc = now;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                message = "تمت إعادة تفعيل أمر الدفع بنجاح",
+                isActive = true
+            });
+        }
     }
 
     [HttpGet("{id}/export-word")]
