@@ -238,4 +238,105 @@ public class ReportsController : ControllerBase
 
         return Ok(result);
     }
+
+    [HttpGet("machinery-summary")]
+    [PermissionAuthorize("REPORTS", "CanAccess")]
+    public async Task<IActionResult> GetMachinerySummary(
+        [FromQuery] DateTime? fromDate,
+        [FromQuery] DateTime? toDate)
+    {
+        var machineries = await _context.Machineries
+            .OrderBy(m => m.DisplayOrder)
+            .ThenBy(m => m.MachineryId)
+            .ToListAsync();
+
+        var query = _context.MoqaysaMachineryItems
+            .Include(mi => mi.Moqaysa)
+            .Where(mi => mi.Moqaysa != null && mi.Moqaysa.IsActive);
+
+        if (fromDate.HasValue) query = query.Where(mi => mi.Moqaysa!.CreatedAtUtc >= fromDate.Value);
+        if (toDate.HasValue) query = query.Where(mi => mi.Moqaysa!.CreatedAtUtc <= toDate.Value.AddDays(1));
+
+        var items = await query.ToListAsync();
+
+        var catalogDict = machineries.ToDictionary(m => m.MachineryId);
+
+        var grouped = items
+            .GroupBy(mi => mi.MachineryId > 0 && catalogDict.ContainsKey(mi.MachineryId)
+                ? mi.MachineryId
+                : machineries.FirstOrDefault(m => m.MachineryNameAr.Trim().Equals(mi.MachineryNameSnapshot.Trim(), StringComparison.OrdinalIgnoreCase))?.MachineryId ?? 0)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var resultList = machineries.Select(mac =>
+        {
+            grouped.TryGetValue(mac.MachineryId, out var macItems);
+            macItems ??= new System.Collections.Generic.List<CentralPress.API.Entities.MoqaysaMachineryItem>();
+
+            decimal totalWorkerHours = macItems.Sum(x => x.Hours);
+            decimal totalMachineHours = macItems.Sum(x => x.MachineHours > 0 ? x.MachineHours : x.Hours);
+            decimal totalWorkerWages = MoqaysaCalculationService.Round2(macItems.Sum(x => x.TotalWorkerWages));
+            decimal totalMachineCosts = MoqaysaCalculationService.Round2(macItems.Sum(x => x.TotalMachineOperatingCost));
+            decimal combinedRevenue = MoqaysaCalculationService.Round2(totalWorkerWages + totalMachineCosts);
+
+            return new
+            {
+                mac.MachineryId,
+                mac.MachineryNameAr,
+                mac.WorkerHourlyFee,
+                mac.MachineOperatingHourlyFee,
+                mac.IsActive,
+                MoqaysatCount = macItems.Select(x => x.MoqaysaId).Distinct().Count(),
+                TotalWorkerHours = totalWorkerHours,
+                TotalMachineHours = totalMachineHours,
+                TotalWorkerWages = totalWorkerWages,
+                TotalMachineCosts = totalMachineCosts,
+                CombinedRevenue = combinedRevenue
+            };
+        }).ToList();
+
+        if (grouped.TryGetValue(0, out var unlinked) && unlinked.Any())
+        {
+            var unlinkedGroups = unlinked.GroupBy(x => x.MachineryNameSnapshot);
+            foreach (var ug in unlinkedGroups)
+            {
+                decimal workerHours = ug.Sum(x => x.Hours);
+                decimal machineHours = ug.Sum(x => x.MachineHours > 0 ? x.MachineHours : x.Hours);
+                decimal workerWages = MoqaysaCalculationService.Round2(ug.Sum(x => x.TotalWorkerWages));
+                decimal machineCosts = MoqaysaCalculationService.Round2(ug.Sum(x => x.TotalMachineOperatingCost));
+                decimal combinedRevenue = MoqaysaCalculationService.Round2(workerWages + machineCosts);
+
+                resultList.Add(new
+                {
+                    MachineryId = 0,
+                    MachineryNameAr = ug.Key + " (غير مدرجة)",
+                    WorkerHourlyFee = ug.FirstOrDefault()?.WorkerHourlyRateSnapshot ?? 0,
+                    MachineOperatingHourlyFee = ug.FirstOrDefault()?.MachineHourlyRateSnapshot ?? 0,
+                    IsActive = false,
+                    MoqaysatCount = ug.Select(x => x.MoqaysaId).Distinct().Count(),
+                    TotalWorkerHours = workerHours,
+                    TotalMachineHours = machineHours,
+                    TotalWorkerWages = workerWages,
+                    TotalMachineCosts = machineCosts,
+                    CombinedRevenue = combinedRevenue
+                });
+            }
+        }
+
+        var totals = new
+        {
+            TotalMachinesCount = resultList.Count,
+            ActiveMachinesCount = resultList.Count(x => x.IsActive),
+            TotalWorkerHours = resultList.Sum(x => x.TotalWorkerHours),
+            TotalMachineHours = resultList.Sum(x => x.TotalMachineHours),
+            TotalWorkerWages = MoqaysaCalculationService.Round2(resultList.Sum(x => x.TotalWorkerWages)),
+            TotalMachineCosts = MoqaysaCalculationService.Round2(resultList.Sum(x => x.TotalMachineCosts)),
+            GrandTotalRevenue = MoqaysaCalculationService.Round2(resultList.Sum(x => x.CombinedRevenue))
+        };
+
+        return Ok(new
+        {
+            totals,
+            items = resultList
+        });
+    }
 }

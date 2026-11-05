@@ -109,6 +109,8 @@ public class Moqaysa
     [Column(TypeName = "decimal(18,2)")]
     public decimal FinalGrandTotal { get; set; }
 
+    public bool AreMachineryHoursLinked { get; set; } = true;
+
     // State Tracking
     public bool IsIncludedInTasweya { get; set; } = false;
     public bool IsPaid { get; set; } = false;

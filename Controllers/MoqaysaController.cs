@@ -47,7 +47,8 @@ public class MoqaysaController : ControllerBase
         string MachineryNameSnapshot,
         decimal Hours,
         decimal WorkerHourlyRateSnapshot,
-        decimal MachineHourlyRateSnapshot
+        decimal MachineHourlyRateSnapshot,
+        decimal? MachineHours = null
     );
 
     public record MoqaysaSaveDto(
@@ -68,7 +69,8 @@ public class MoqaysaController : ControllerBase
         decimal? SelectedMinistryOfFinancePercent = null,
         decimal? SelectedWorkersFundPercent = null,
         decimal? SelectedOtherPercent = null,
-        decimal? SelectedVatPercent = null
+        decimal? SelectedVatPercent = null,
+        bool AreMachineryHoursLinked = true
     );
 
     [HttpPost("calculate-preview")]
@@ -166,11 +168,13 @@ public class MoqaysaController : ControllerBase
                 mac.MachineryId,
                 mac.MachineryNameSnapshot,
                 mac.Hours,
+                mac.MachineHours,
                 mac.WorkerHourlyRateSnapshot,
                 mac.TotalWorkerWages,
                 mac.MachineHourlyRateSnapshot,
                 mac.TotalMachineOperatingCost
             }).ToList(),
+            m.AreMachineryHoursLinked,
             m.RawMaterials,
             m.MaterialProcessingFee,
             m.SelectedMaterialProcessingPercent,
@@ -225,7 +229,7 @@ public class MoqaysaController : ControllerBase
         {
             JobOrderNumber = dto.JobOrderNumber.Trim(),
             CustomerId = dto.CustomerId,
-            RequiredQuantityText = dto.RequiredQuantityText?.Trim() ?? "",
+            RequiredQuantityText = SanitizeQuantity(dto.RequiredQuantityText),
             SpecificationsText = dto.SpecificationsText?.Trim() ?? "",
 
             RawMaterials = calc.RawMaterials,
@@ -258,6 +262,7 @@ public class MoqaysaController : ControllerBase
             VatAmount = calc.VatAmount,
             FinalGrandTotal = calc.FinalGrandTotal,
 
+            AreMachineryHoursLinked = dto.AreMachineryHoursLinked,
             IsIncludedInTasweya = false,
             IsPaid = false,
             CreatedAtUtc = DateTime.UtcNow,
@@ -282,13 +287,16 @@ public class MoqaysaController : ControllerBase
         // Machinery Items
         foreach (var mac in dto.MachineryItems)
         {
-            decimal wCost = MoqaysaCalculationService.Round2(mac.Hours * mac.WorkerHourlyRateSnapshot);
-            decimal mCost = MoqaysaCalculationService.Round2(mac.Hours * mac.MachineHourlyRateSnapshot);
+            decimal workerHours = mac.Hours;
+            decimal machineHours = mac.MachineHours ?? mac.Hours;
+            decimal wCost = MoqaysaCalculationService.Round2(workerHours * mac.WorkerHourlyRateSnapshot);
+            decimal mCost = MoqaysaCalculationService.Round2(machineHours * mac.MachineHourlyRateSnapshot);
             moqaysa.MachineryItems.Add(new MoqaysaMachineryItem
             {
                 MachineryId = mac.MachineryId,
                 MachineryNameSnapshot = mac.MachineryNameSnapshot?.Trim() ?? "آلة",
-                Hours = mac.Hours,
+                Hours = workerHours,
+                MachineHours = machineHours,
                 WorkerHourlyRateSnapshot = mac.WorkerHourlyRateSnapshot,
                 TotalWorkerWages = wCost,
                 MachineHourlyRateSnapshot = mac.MachineHourlyRateSnapshot,
@@ -299,7 +307,31 @@ public class MoqaysaController : ControllerBase
         _context.Moqaysat.Add(moqaysa);
         await _context.SaveChangesAsync();
 
-        return Ok(new { message = "تم حفظ المقايسة بنجاح", moqaysaId = moqaysa.MoqaysaId });
+        return Ok(new
+        {
+            message = "تم حفظ المقايسة بنجاح",
+            moqaysaId = moqaysa.MoqaysaId,
+            jobOrderNumber = moqaysa.JobOrderNumber,
+            customerId = moqaysa.CustomerId,
+            customerNameAr = customer?.CustomerNameAr ?? "",
+            requiredQuantityText = moqaysa.RequiredQuantityText,
+            rawMaterials = moqaysa.RawMaterials,
+            materialProcessingFee = moqaysa.MaterialProcessingFee,
+            filmsProcessingFee = moqaysa.FilmsProcessingFee,
+            totalMaterials = moqaysa.TotalMaterials,
+            totalWorkerWages = moqaysa.TotalWorkerWages,
+            totalMachineCosts = moqaysa.TotalMachineCosts,
+            adminExpenses = moqaysa.AdminExpenses,
+            markupAmount = moqaysa.MarkupAmount,
+            selectedMarkupPercent = moqaysa.SelectedMarkupPercent,
+            ministryOfFinanceFee = moqaysa.MinistryOfFinanceFee,
+            workersSyndicateFund = moqaysa.WorkersSyndicateFund,
+            otherAmount = moqaysa.OtherAmount,
+            vatAmount = moqaysa.VatAmount,
+            applyVat = moqaysa.ApplyVat,
+            finalGrandTotal = moqaysa.FinalGrandTotal,
+            createdAtUtc = moqaysa.CreatedAtUtc
+        });
     }
 
     [HttpPut("{id}")]
@@ -307,6 +339,7 @@ public class MoqaysaController : ControllerBase
     public async Task<IActionResult> Update(int id, [FromBody] MoqaysaSaveDto dto)
     {
         var moqaysa = await _context.Moqaysat
+            .Include(m => m.Customer)
             .Include(m => m.MaterialItems)
             .Include(m => m.MachineryItems)
             .FirstOrDefaultAsync(m => m.MoqaysaId == id);
@@ -316,11 +349,15 @@ public class MoqaysaController : ControllerBase
         if (moqaysa.IsIncludedInTasweya)
             return BadRequest(new { message = "لا يمكن تعديل المقايسة لأنها مُدرجة بالفعل في كشف تسوية / مطالبة رسمية" });
 
+        var customer = await _context.Customers.FindAsync(dto.CustomerId);
+        if (customer == null)
+            return BadRequest(new { message = "الجهة الطالبة غير موجودة" });
+
         var calc = await PerformCalculationAsync(dto);
 
         moqaysa.JobOrderNumber = dto.JobOrderNumber.Trim();
         moqaysa.CustomerId = dto.CustomerId;
-        moqaysa.RequiredQuantityText = dto.RequiredQuantityText?.Trim() ?? "";
+        moqaysa.RequiredQuantityText = SanitizeQuantity(dto.RequiredQuantityText);
         moqaysa.SpecificationsText = dto.SpecificationsText?.Trim() ?? "";
 
         moqaysa.RawMaterials = calc.RawMaterials;
@@ -352,6 +389,7 @@ public class MoqaysaController : ControllerBase
         moqaysa.SelectedVatPercent = calc.SelectedVatPercent;
         moqaysa.VatAmount = calc.VatAmount;
         moqaysa.FinalGrandTotal = calc.FinalGrandTotal;
+        moqaysa.AreMachineryHoursLinked = dto.AreMachineryHoursLinked;
 
         // Replace Items
         _context.MoqaysaMaterialItems.RemoveRange(moqaysa.MaterialItems);
@@ -372,13 +410,16 @@ public class MoqaysaController : ControllerBase
 
         foreach (var mac in dto.MachineryItems)
         {
-            decimal wCost = MoqaysaCalculationService.Round2(mac.Hours * mac.WorkerHourlyRateSnapshot);
-            decimal mCost = MoqaysaCalculationService.Round2(mac.Hours * mac.MachineHourlyRateSnapshot);
+            decimal workerHours = mac.Hours;
+            decimal machineHours = mac.MachineHours ?? mac.Hours;
+            decimal wCost = MoqaysaCalculationService.Round2(workerHours * mac.WorkerHourlyRateSnapshot);
+            decimal mCost = MoqaysaCalculationService.Round2(machineHours * mac.MachineHourlyRateSnapshot);
             moqaysa.MachineryItems.Add(new MoqaysaMachineryItem
             {
                 MachineryId = mac.MachineryId,
                 MachineryNameSnapshot = mac.MachineryNameSnapshot?.Trim() ?? "آلة",
-                Hours = mac.Hours,
+                Hours = workerHours,
+                MachineHours = machineHours,
                 WorkerHourlyRateSnapshot = mac.WorkerHourlyRateSnapshot,
                 TotalWorkerWages = wCost,
                 MachineHourlyRateSnapshot = mac.MachineHourlyRateSnapshot,
@@ -387,7 +428,31 @@ public class MoqaysaController : ControllerBase
         }
 
         await _context.SaveChangesAsync();
-        return Ok(new { message = "تم تحديث المقايسة بنجاح" });
+        return Ok(new
+        {
+            message = "تم تحديث المقايسة بنجاح",
+            moqaysaId = moqaysa.MoqaysaId,
+            jobOrderNumber = moqaysa.JobOrderNumber,
+            customerId = moqaysa.CustomerId,
+            customerNameAr = customer.CustomerNameAr,
+            requiredQuantityText = moqaysa.RequiredQuantityText,
+            rawMaterials = moqaysa.RawMaterials,
+            materialProcessingFee = moqaysa.MaterialProcessingFee,
+            filmsProcessingFee = moqaysa.FilmsProcessingFee,
+            totalMaterials = moqaysa.TotalMaterials,
+            totalWorkerWages = moqaysa.TotalWorkerWages,
+            totalMachineCosts = moqaysa.TotalMachineCosts,
+            adminExpenses = moqaysa.AdminExpenses,
+            markupAmount = moqaysa.MarkupAmount,
+            selectedMarkupPercent = moqaysa.SelectedMarkupPercent,
+            ministryOfFinanceFee = moqaysa.MinistryOfFinanceFee,
+            workersSyndicateFund = moqaysa.WorkersSyndicateFund,
+            otherAmount = moqaysa.OtherAmount,
+            vatAmount = moqaysa.VatAmount,
+            applyVat = moqaysa.ApplyVat,
+            finalGrandTotal = moqaysa.FinalGrandTotal,
+            createdAtUtc = moqaysa.CreatedAtUtc
+        });
     }
 
     [HttpPatch("{id}/toggle-active")]
@@ -440,7 +505,7 @@ public class MoqaysaController : ControllerBase
 
         // Calculate Worker wages and machine operating costs from machinery items
         decimal totalWorkerWages = dto.MachineryItems.Sum(m => MoqaysaCalculationService.Round2(m.Hours * m.WorkerHourlyRateSnapshot));
-        decimal totalMachineCosts = dto.MachineryItems.Sum(m => MoqaysaCalculationService.Round2(m.Hours * m.MachineHourlyRateSnapshot));
+        decimal totalMachineCosts = dto.MachineryItems.Sum(m => MoqaysaCalculationService.Round2((m.MachineHours ?? m.Hours) * m.MachineHourlyRateSnapshot));
 
         // Load formula configs
         var configs = await _context.CostingFormulaConfigs.Where(c => c.IsActive).ToListAsync();
@@ -474,5 +539,13 @@ public class MoqaysaController : ControllerBase
         };
 
         return _calculationService.Calculate(input);
+    }
+
+    private static string SanitizeQuantity(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return "";
+        var clean = text.Trim();
+        clean = new string(clean.Select(c => c >= '٠' && c <= '٩' ? (char)('0' + (c - '٠')) : c).ToArray());
+        return new string(clean.Where(char.IsDigit).ToArray());
     }
 }

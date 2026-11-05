@@ -66,9 +66,7 @@ public class CustomersController : ControllerBase
             AccountId = nextId,
             AccountCode = string.IsNullOrWhiteSpace(dto.AccountCode) ? $"ACC-{nextId}" : dto.AccountCode.Trim(),
             AccountNameAr = dto.AccountNameAr.Trim(),
-            DebitHeaderTextAr = string.IsNullOrWhiteSpace(dto.DebitHeaderTextAr)
-                ? $"من حـ / {dto.AccountNameAr.Trim()}"
-                : dto.DebitHeaderTextAr.Trim(),
+            DebitHeaderTextAr = FormatDebitHeaderText(dto.DebitHeaderTextAr, dto.AccountNameAr),
             IsActive = true
         };
 
@@ -90,7 +88,7 @@ public class CustomersController : ControllerBase
 
         account.AccountNameAr = dto.AccountNameAr.Trim();
         if (!string.IsNullOrWhiteSpace(dto.AccountCode)) account.AccountCode = dto.AccountCode.Trim();
-        if (!string.IsNullOrWhiteSpace(dto.DebitHeaderTextAr)) account.DebitHeaderTextAr = dto.DebitHeaderTextAr.Trim();
+        if (!string.IsNullOrWhiteSpace(dto.DebitHeaderTextAr)) account.DebitHeaderTextAr = FormatDebitHeaderText(dto.DebitHeaderTextAr, dto.AccountNameAr);
 
         await _context.SaveChangesAsync();
 
@@ -209,5 +207,12 @@ public class CustomersController : ControllerBase
         await _context.SaveChangesAsync();
 
         return Ok(new { message = customer.IsActive ? "تم تفعيل الجهة الطالبة" : "تم تعطيل الجهة الطالبة", isActive = customer.IsActive });
+    }
+
+    private static string FormatDebitHeaderText(string? text, string fallbackName)
+    {
+        var raw = string.IsNullOrWhiteSpace(text) ? fallbackName : text.Trim();
+        var cleaned = System.Text.RegularExpressions.Regex.Replace(raw, @"^من\s*حـ?\s*[\/\\:]\s*", "").Trim();
+        return $"من حـ / {cleaned}";
     }
 }

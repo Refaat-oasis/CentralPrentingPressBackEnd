@@ -227,6 +227,9 @@ public class TasweyaController : ControllerBase
         if (moqaysat.Count != dto.MoqaysaIds.Count)
             return BadRequest(new { message = "بعض المقايسات المحددة غير موجودة أو غير فعالة" });
 
+        if (moqaysat.Any(m => m.CustomerId != dto.CustomerId))
+            return BadRequest(new { message = "جميع المقايسات المحددة يجب أن تتبع نفس الجهة الطالبة لكشف التسوية" });
+
         var activeConflicts = await _context.TasweyaMoqaysaLinks
             .Include(link => link.Moqaysa)
             .Where(link => dto.MoqaysaIds.Contains(link.MoqaysaId) && link.Tasweya != null && link.Tasweya.IsActive)
@@ -352,6 +355,9 @@ public class TasweyaController : ControllerBase
 
         if (moqaysat.Count != dto.MoqaysaIds.Count)
             return BadRequest(new { message = "بعض المقايسات المحددة غير موجودة أو غير فعالة" });
+
+        if (moqaysat.Any(m => m.CustomerId != dto.CustomerId))
+            return BadRequest(new { message = "جميع المقايسات المحددة يجب أن تتبع نفس الجهة الطالبة لكشف التسوية" });
 
         var activeConflicts = await _context.TasweyaMoqaysaLinks
             .Include(link => link.Moqaysa)
