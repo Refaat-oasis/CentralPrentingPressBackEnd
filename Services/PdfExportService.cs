@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Collections.Generic;
 using System.Linq;
 using CentralPress.API.Entities;
@@ -13,6 +14,35 @@ public class PdfExportService
     static PdfExportService()
     {
         QuestPDF.Settings.License = LicenseType.Community;
+    }
+
+    private static byte[]? _logoBytes;
+    private static byte[]? GetUniversityLogoBytes()
+    {
+        if (_logoBytes != null) return _logoBytes;
+
+        string[] possiblePaths = new[]
+        {
+            Path.Combine(AppContext.BaseDirectory, "assets", "assiut-univ-logo.png"),
+            Path.Combine(Directory.GetCurrentDirectory(), "assets", "assiut-univ-logo.png"),
+            Path.Combine(Directory.GetCurrentDirectory(), "CentralPrentingPressBackEnd", "assets", "assiut-univ-logo.png"),
+            @"C:\Users\Ziad\Desktop\Freelance projects\Prenting System\CentralPrentingPressFrontEnd\src\assets\assiut-univ-logo.png",
+            Path.Combine(Directory.GetCurrentDirectory(), "..", "CentralPrentingPressFrontEnd", "src", "assets", "assiut-univ-logo.png")
+        };
+
+        foreach (var path in possiblePaths)
+        {
+            if (File.Exists(path))
+            {
+                try
+                {
+                    _logoBytes = File.ReadAllBytes(path);
+                    return _logoBytes;
+                }
+                catch { }
+            }
+        }
+        return null;
     }
 
     public byte[] ExportMoqaysaToPdf(Moqaysa m)
@@ -34,9 +64,14 @@ public class PdfExportService
                 {
                     col.Item().Row(row =>
                     {
-                        // Right: University Title & Customer (matches official reference photo)
+                        // Right: University Logo, Title & Customer (matches official reference photo)
                         row.RelativeItem(2).AlignRight().Column(c =>
                         {
+                            var logo = GetUniversityLogoBytes();
+                            if (logo != null)
+                            {
+                                c.Item().PaddingBottom(2).MaxHeight(36).MaxWidth(36).Image(logo);
+                            }
                             c.Item().Text("جامعة أسيوط").Bold().FontSize(10);
                             c.Item().Text("مطبعة الجامعة المركزية").Bold().FontSize(11);
                             c.Item().Text($"الجهة الطالبة: {m.Customer?.CustomerNameAr ?? "غير محدد"}").FontSize(8.5f);
@@ -416,13 +451,31 @@ public class PdfExportService
 
                 page.Header().Column(col =>
                 {
-                    col.Item().AlignCenter().Text("صندوق مطبعة جامعة أسيوط").Bold().FontSize(12);
-                    col.Item().AlignCenter().Text("كشف تسوية").Bold().FontSize(16).Underline();
-                    col.Item().PaddingTop(4).Row(row =>
+                    col.Item().Row(r =>
                     {
-                        row.RelativeItem().AlignRight().Text($"رقم التسوية: {t.SettlementNumber}").Bold();
-                        row.RelativeItem().AlignCenter().Text($"بتاريخ: {t.SettlementDate:yyyy/MM/dd}").Bold();
-                        row.RelativeItem().AlignLeft().Text($"مطالبة رقم: {t.ClaimNumber}").Bold();
+                        r.RelativeItem().AlignRight().Column(c =>
+                        {
+                            var logo = GetUniversityLogoBytes();
+                            if (logo != null)
+                            {
+                                c.Item().PaddingBottom(2).MaxHeight(36).MaxWidth(36).Image(logo);
+                            }
+                            c.Item().Text("جامعة أسيوط").Bold().FontSize(9);
+                            c.Item().Text("مطبعة الجامعة المركزية").Bold().FontSize(9);
+                        });
+
+                        r.RelativeItem(2).AlignCenter().Column(c =>
+                        {
+                            c.Item().Text("صندوق مطبعة جامعة أسيوط").Bold().FontSize(11);
+                            c.Item().Text("كشف تسوية").Bold().FontSize(15).Underline();
+                        });
+
+                        r.RelativeItem().AlignLeft().Column(c =>
+                        {
+                            c.Item().Text($"رقم التسوية: {t.SettlementNumber}").Bold();
+                            c.Item().Text($"بتاريخ: {t.SettlementDate:yyyy/MM/dd}").Bold();
+                            c.Item().Text($"مطالبة رقم: {t.ClaimNumber}").Bold();
+                        });
                     });
                     col.Item().PaddingTop(2).LineHorizontal(0.5f);
                 });
