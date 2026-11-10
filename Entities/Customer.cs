@@ -18,6 +18,9 @@ public class Customer
     [ForeignKey(nameof(AccountId))]
     public virtual AccountEntity? Account { get; set; }
 
+    [Column(TypeName = "decimal(18,2)")]
+    public decimal? BudgetCeiling { get; set; }
+
     [MaxLength(50)]
     public string? Phone { get; set; }
 

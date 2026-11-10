@@ -1,11 +1,12 @@
-using System.Linq;
+using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
-using CentralPress.API.Data;
-using CentralPress.API.Entities;
+using CentralPress.API.DTOs;
 using CentralPress.API.Filters;
+using CentralPress.API.Services;
+using CentralPress.API.ViewModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace CentralPress.API.Controllers;
 
@@ -14,74 +15,95 @@ namespace CentralPress.API.Controllers;
 [Authorize]
 public class MaterialsController : ControllerBase
 {
-    private readonly ApplicationDbContext _context;
+    private readonly IMaterialService _materialService;
 
-    public MaterialsController(ApplicationDbContext context)
+    public MaterialsController(IMaterialService materialService)
     {
-        _context = context;
+        _materialService = materialService;
     }
-
-    public record MaterialDto(string MaterialNameAr, string UnitNameAr);
 
     [HttpGet]
     [PermissionAuthorize("MATERIALS", "CanAccess")]
-    public async Task<IActionResult> GetAll([FromQuery] bool activeOnly = false)
+    public async Task<ActionResult<List<MaterialViewModel>>> GetAll(
+        [FromQuery] bool activeOnly = false,
+        CancellationToken ct = default)
     {
-        var query = _context.Materials.AsQueryable();
-        if (activeOnly)
-            query = query.Where(m => m.IsActive);
-
-        var list = await query
-            .OrderBy(m => m.MaterialNameAr)
-            .ToListAsync();
-
+        var list = await _materialService.GetAllAsync(activeOnly, ct);
         return Ok(list);
+    }
+
+    [HttpGet("{id}")]
+    [PermissionAuthorize("MATERIALS", "CanAccess")]
+    public async Task<ActionResult<MaterialViewModel>> GetById(int id, CancellationToken ct)
+    {
+        var item = await _materialService.GetByIdAsync(id, ct);
+        if (item == null)
+            return NotFound(new { message = "الخامة غير موجودة" });
+
+        return Ok(item);
     }
 
     [HttpPost]
     [PermissionAuthorize("MATERIALS", "CanCreate")]
-    public async Task<IActionResult> Create([FromBody] MaterialDto dto)
+    public async Task<IActionResult> Create(
+        [FromBody] MaterialDto dto,
+        CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(dto.MaterialNameAr))
-            return BadRequest(new { message = "يرجى كتابة اسم الخامة" });
-
-        var item = new Material
+        try
         {
-            MaterialNameAr = dto.MaterialNameAr.Trim(),
-            UnitNameAr = string.IsNullOrWhiteSpace(dto.UnitNameAr) ? "فرخ" : dto.UnitNameAr.Trim(),
-            IsActive = true
-        };
-
-        _context.Materials.Add(item);
-        await _context.SaveChangesAsync();
-
-        return Ok(new { message = "تمت إضافة الخامة بنجاح", item });
+            var item = await _materialService.CreateAsync(dto, ct);
+            return Ok(new
+            {
+                message = "تمت إضافة الخامة بنجاح",
+                materialId = item.MaterialId,
+                item
+            });
+        }
+        catch (System.ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     [HttpPut("{id}")]
     [PermissionAuthorize("MATERIALS", "CanUpdate")]
-    public async Task<IActionResult> Update(int id, [FromBody] MaterialDto dto)
+    public async Task<IActionResult> Update(
+        int id,
+        [FromBody] MaterialDto dto,
+        CancellationToken ct)
     {
-        var item = await _context.Materials.FindAsync(id);
-        if (item == null) return NotFound(new { message = "الخامة غير موجودة" });
+        try
+        {
+            var item = await _materialService.UpdateAsync(id, dto, ct);
+            if (item == null)
+                return NotFound(new { message = "الخامة غير موجودة" });
 
-        item.MaterialNameAr = dto.MaterialNameAr.Trim();
-        item.UnitNameAr = string.IsNullOrWhiteSpace(dto.UnitNameAr) ? "فرخ" : dto.UnitNameAr.Trim();
-
-        await _context.SaveChangesAsync();
-        return Ok(new { message = "تم تعديل الخامة بنجاح", item });
+            return Ok(new
+            {
+                message = "تم تعديل الخامة بنجاح",
+                item
+            });
+        }
+        catch (System.ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     [HttpPatch("{id}/toggle-active")]
+    [HttpPut("{id}/toggle-active")]
     [PermissionAuthorize("MATERIALS", "CanToggleActive")]
-    public async Task<IActionResult> ToggleActive(int id)
+    public async Task<IActionResult> ToggleActive(int id, CancellationToken ct)
     {
-        var item = await _context.Materials.FindAsync(id);
-        if (item == null) return NotFound(new { message = "الخامة غير موجودة" });
+        var exists = await _materialService.GetByIdAsync(id, ct);
+        if (exists == null)
+            return NotFound(new { message = "الخامة غير موجودة" });
 
-        item.IsActive = !item.IsActive;
-        await _context.SaveChangesAsync();
-
-        return Ok(new { message = item.IsActive ? "تم تفعيل الخامة" : "تم تعطيل الخامة", isActive = item.IsActive });
+        var isActive = await _materialService.ToggleActiveAsync(id, ct);
+        return Ok(new
+        {
+            message = isActive ? "تم تفعيل الخامة" : "تم تعطيل الخامة",
+            isActive
+        });
     }
 }

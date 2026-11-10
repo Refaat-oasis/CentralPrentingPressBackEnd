@@ -1,27 +1,24 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using CentralPress.API.Data;
+using CentralPress.API.Entities;
+using CentralPress.API.ViewModels;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
 namespace CentralPress.API.Services;
 
-public record ModuleEffectivePermissionDto(
-    string ModuleKey,
-    string ModuleNameAr,
-    bool CanAccess,
-    bool CanCreate,
-    bool CanUpdate,
-    bool CanToggleActive
-);
-
 public class PermissionService
 {
     private readonly ApplicationDbContext _context;
+    private readonly UserManager<ApplicationUser> _userManager;
 
-    public PermissionService(ApplicationDbContext context)
+    public PermissionService(ApplicationDbContext context, UserManager<ApplicationUser> userManager)
     {
         _context = context;
+        _userManager = userManager;
     }
 
     public async Task<bool> HasPermissionAsync(string userId, string moduleKey, string actionType)
@@ -32,22 +29,27 @@ public class PermissionService
 
         if (user == null || !user.IsActive) return false;
 
-        // Root administrator always has full access
-        if (user.Email == "admin@aup.edu.eg" || user.EmployeeCode == "EMP001") return true;
+        // SuperAdmin or Admin role has full access to all modules
+        if (await _userManager.IsInRoleAsync(user, "SuperAdmin") || await _userManager.IsInRoleAsync(user, "Admin"))
+        {
+            return true;
+        }
 
-        var module = await _context.SystemModules.FirstOrDefaultAsync(m => m.ModuleKey == moduleKey && m.IsActive);
+        var targetKey = (moduleKey ?? "").ToUpper();
+        var module = await _context.SystemModules.FirstOrDefaultAsync(m =>
+            m.ModuleKey.ToUpper() == targetKey && m.IsActive);
         if (module == null) return false;
 
         // 1. Check User Override
         var userOverride = user.PermissionOverrides.FirstOrDefault(o => o.ModuleId == module.ModuleId);
         if (userOverride != null)
         {
-            bool? overrideVal = actionType switch
+            bool? overrideVal = actionType.ToLowerInvariant() switch
             {
-                "CanAccess" => userOverride.CanAccess,
-                "CanCreate" => userOverride.CanCreate,
-                "CanUpdate" => userOverride.CanUpdate,
-                "CanToggleActive" => userOverride.CanToggleActive,
+                "canaccess" or "access" => userOverride.CanAccess,
+                "cancreate" or "create" => userOverride.CanCreate,
+                "canupdate" or "update" => userOverride.CanUpdate,
+                "cantoggleactive" or "toggleactive" => userOverride.CanToggleActive,
                 _ => null
             };
 
@@ -62,12 +64,12 @@ public class PermissionService
 
             if (rolePerm != null)
             {
-                return actionType switch
+                return actionType.ToLowerInvariant() switch
                 {
-                    "CanAccess" => rolePerm.CanAccess,
-                    "CanCreate" => rolePerm.CanCreate,
-                    "CanUpdate" => rolePerm.CanUpdate,
-                    "CanToggleActive" => rolePerm.CanToggleActive,
+                    "canaccess" or "access" => rolePerm.CanAccess,
+                    "cancreate" or "create" => rolePerm.CanCreate,
+                    "canupdate" or "update" => rolePerm.CanUpdate,
+                    "cantoggleactive" or "toggleactive" => rolePerm.CanToggleActive,
                     _ => false
                 };
             }
@@ -76,19 +78,19 @@ public class PermissionService
         return false;
     }
 
-    public async Task<List<ModuleEffectivePermissionDto>> GetUserPermissionsAsync(string userId)
+    public async Task<List<ModuleEffectivePermissionViewModel>> GetUserPermissionsAsync(string userId)
     {
         var user = await _context.Users
             .Include(u => u.PermissionOverrides)
             .FirstOrDefaultAsync(u => u.Id == userId);
 
         var modules = await _context.SystemModules.Where(m => m.IsActive).ToListAsync();
-        if (user == null) return new List<ModuleEffectivePermissionDto>();
+        if (user == null) return new List<ModuleEffectivePermissionViewModel>();
 
-        // Root administrator always has full access to all modules
-        if (user.Email == "admin@aup.edu.eg" || user.EmployeeCode == "EMP001")
+        // SuperAdmin or Admin has full access to all modules
+        if (await _userManager.IsInRoleAsync(user, "SuperAdmin") || await _userManager.IsInRoleAsync(user, "Admin"))
         {
-            return modules.Select(mod => new ModuleEffectivePermissionDto(
+            return modules.Select(mod => new ModuleEffectivePermissionViewModel(
                 mod.ModuleKey,
                 mod.ModuleNameAr,
                 true,
@@ -102,7 +104,7 @@ public class PermissionService
             ? await _context.RolePermissions.Where(rp => rp.JobTitleId == user.JobTitleId.Value).ToListAsync()
             : new List<Entities.RolePermission>();
 
-        var result = new List<ModuleEffectivePermissionDto>();
+        var result = new List<ModuleEffectivePermissionViewModel>();
 
         foreach (var mod in modules)
         {
@@ -114,7 +116,7 @@ public class PermissionService
             bool update = uo?.CanUpdate ?? rp?.CanUpdate ?? false;
             bool toggle = uo?.CanToggleActive ?? rp?.CanToggleActive ?? false;
 
-            result.Add(new ModuleEffectivePermissionDto(
+            result.Add(new ModuleEffectivePermissionViewModel(
                 mod.ModuleKey,
                 mod.ModuleNameAr,
                 access,

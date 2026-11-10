@@ -8,13 +8,6 @@ using Microsoft.Extensions.Logging;
 
 namespace CentralPress.API.Services;
 
-public interface IEmailService
-{
-    Task<(bool Success, string? ErrorMessage)> SendPasswordResetCodeAsync(string email, string employeeName, string resetCode);
-    Task<(bool Success, string? ErrorMessage)> SendNewUserInvitationCodeAsync(string email, string employeeName, string employeeCode, string initialCode);
-    Task<(bool Success, string Message, string? Details)> TestSmtpConnectionAsync(string testRecipientEmail);
-}
-
 public class EmailService : IEmailService
 {
     private readonly ILogger<EmailService> _logger;
@@ -28,13 +21,7 @@ public class EmailService : IEmailService
 
     public async Task<(bool Success, string? ErrorMessage)> SendPasswordResetCodeAsync(string email, string employeeName, string resetCode)
     {
-        _logger.LogInformation("=================================================================");
-        _logger.LogInformation("[EMAIL DISPATCH] Password Reset Code for {Name} ({Email}): {Code}", employeeName, email, resetCode);
-        _logger.LogInformation("=================================================================");
-
-        Console.ForegroundColor = ConsoleColor.Magenta;
-        Console.WriteLine($"\n[📧 استعادة كلمة المرور] تم توليد رمز التحقق إلى {email} ({employeeName}): >>> {resetCode} <<< (صالح لمدة 15 دقيقة)\n");
-        Console.ResetColor();
+        _logger.LogInformation("[EMAIL DISPATCH] Password Reset Code dispatched for {Name} ({Email})", employeeName, email);
 
         var subject = "مطبعة جامعة أسيوط - رمز استعادة كلمة المرور";
         var bodyHtml = $@"
@@ -87,16 +74,7 @@ public class EmailService : IEmailService
 
     public async Task<(bool Success, string? ErrorMessage)> SendNewUserInvitationCodeAsync(string email, string employeeName, string employeeCode, string initialCode)
     {
-        _logger.LogInformation("=================================================================");
-        _logger.LogInformation("[EMAIL DISPATCH] New Employee Account Invitation: {Name} | Code: {EmpCode} | Email: {Email} | Initial Password: {Password}", employeeName, employeeCode, email, initialCode);
-        _logger.LogInformation("=================================================================");
-
-        Console.ForegroundColor = ConsoleColor.Cyan;
-        Console.WriteLine($"\n[📧 دعوة موظف جديد] تم توليد كود التفعيل والدخول إلى {email} ({employeeName}):");
-        Console.WriteLine($"   كود الموظف: {employeeCode}");
-        Console.WriteLine($"   رمز الدخول المبدئي (كلمة المرور المؤقتة): >>> {initialCode} <<<");
-        Console.WriteLine($"   (ملاحظة: سيُطلب من الموظف تعيين كلمة مرور شخصية جديدة وتأكيدها فور الدخول)\n");
-        Console.ResetColor();
+        _logger.LogInformation("[EMAIL DISPATCH] New Employee Account Invitation dispatched for {Name} ({Email}), Code: {EmpCode}", employeeName, email, employeeCode);
 
         var subject = "مطبعة جامعة أسيوط - بيانات حسابك الجديد للدخول للنظام";
         var bodyHtml = $@"

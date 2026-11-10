@@ -38,6 +38,9 @@ namespace CentralPress.API.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
+                    b.Property<decimal?>("BudgetCeiling")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<string>("DebitHeaderTextAr")
                         .IsRequired()
                         .HasMaxLength(250)
@@ -47,6 +50,10 @@ namespace CentralPress.API.Migrations
                         .HasColumnType("bit");
 
                     b.HasKey("AccountId");
+
+                    b.HasIndex("AccountCode")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Accounts_AccountCode_Unique");
 
                     b.ToTable("Accounts");
                 });
@@ -109,12 +116,15 @@ namespace CentralPress.API.Migrations
                     b.Property<string>("PasswordHash")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("PasswordResetCode")
-                        .HasMaxLength(10)
-                        .HasColumnType("nvarchar(10)");
-
                     b.Property<DateTime?>("PasswordResetCodeExpiryUtc")
                         .HasColumnType("datetime2");
+
+                    b.Property<string>("PasswordResetCodeHash")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<int>("PasswordResetFailedAttempts")
+                        .HasColumnType("int");
 
                     b.Property<string>("PhoneNumber")
                         .HasColumnType("nvarchar(max)");
@@ -139,7 +149,8 @@ namespace CentralPress.API.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("EmployeeCode")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("IX_AspNetUsers_EmployeeCode_Unique");
 
                     b.HasIndex("JobTitleId");
 
@@ -210,6 +221,18 @@ namespace CentralPress.API.Migrations
 
                     b.HasKey("AuditId");
 
+                    b.HasIndex("ModuleName")
+                        .HasDatabaseName("IX_AuditBacklogs_ModuleName");
+
+                    b.HasIndex("TimestampUtc")
+                        .HasDatabaseName("IX_AuditBacklogs_TimestampUtc");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("IX_AuditBacklogs_UserId");
+
+                    b.HasIndex("ModuleName", "TimestampUtc")
+                        .HasDatabaseName("IX_AuditBacklogs_Module_Timestamp");
+
                     b.ToTable("AuditBacklogs");
                 });
 
@@ -277,6 +300,9 @@ namespace CentralPress.API.Migrations
                         .HasMaxLength(300)
                         .HasColumnType("nvarchar(300)");
 
+                    b.Property<decimal?>("BudgetCeiling")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<string>("CustomerNameAr")
                         .IsRequired()
                         .HasMaxLength(250)
@@ -337,6 +363,10 @@ namespace CentralPress.API.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("MachineryId"));
 
+                    b.Property<decimal>("DepreciationHourlyRate")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
                     b.Property<int>("DisplayOrder")
                         .HasColumnType("int");
 
@@ -344,15 +374,30 @@ namespace CentralPress.API.Migrations
                         .HasColumnType("bit");
 
                     b.Property<decimal>("MachineOperatingHourlyFee")
-                        .HasColumnType("decimal(18,2)");
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
 
                     b.Property<string>("MachineryNameAr")
                         .IsRequired()
                         .HasMaxLength(150)
                         .HasColumnType("nvarchar(150)");
 
+                    b.Property<decimal>("MaintenanceHourlyRate")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<string>("MaintenanceNotes")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("MaintenanceStatus")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
                     b.Property<decimal>("WorkerHourlyFee")
-                        .HasColumnType("decimal(18,2)");
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
 
                     b.HasKey("MachineryId");
 
@@ -501,7 +546,13 @@ namespace CentralPress.API.Migrations
 
                     b.HasKey("MoqaysaId");
 
+                    b.HasIndex("CreatedByUserId")
+                        .HasDatabaseName("IX_Moqaysat_CreatedByUserId");
+
                     b.HasIndex("CustomerId");
+
+                    b.HasIndex("JobOrderNumber")
+                        .HasDatabaseName("IX_Moqaysat_JobOrderNumber");
 
                     b.ToTable("Moqaysat");
                 });
@@ -518,7 +569,8 @@ namespace CentralPress.API.Migrations
                         .HasColumnType("decimal(18,2)");
 
                     b.Property<decimal>("MachineHourlyRateSnapshot")
-                        .HasColumnType("decimal(18,2)");
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
 
                     b.Property<int>("MachineryId")
                         .HasColumnType("int");
@@ -538,7 +590,8 @@ namespace CentralPress.API.Migrations
                         .HasColumnType("decimal(18,2)");
 
                     b.Property<decimal>("WorkerHourlyRateSnapshot")
-                        .HasColumnType("decimal(18,2)");
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
 
                     b.HasKey("OperationId");
 
@@ -576,7 +629,8 @@ namespace CentralPress.API.Migrations
                         .HasColumnType("decimal(18,2)");
 
                     b.Property<decimal>("UnitPrice")
-                        .HasColumnType("decimal(18,2)");
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
 
                     b.HasKey("ItemId");
 
@@ -598,6 +652,17 @@ namespace CentralPress.API.Migrations
                     b.Property<int>("AccountId")
                         .HasColumnType("int");
 
+                    b.Property<string>("CancellationReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<DateTime?>("CancelledAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CancelledByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
                     b.Property<DateTime?>("ConfirmedAtUtc")
                         .HasColumnType("datetime2");
 
@@ -607,6 +672,10 @@ namespace CentralPress.API.Migrations
 
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
 
                     b.Property<int?>("CustomerId")
                         .HasColumnType("int");
@@ -621,6 +690,13 @@ namespace CentralPress.API.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
 
+                    b.Property<DateTime?>("PaidAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("PaidByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
                     b.Property<DateOnly>("PaymentDate")
                         .HasColumnType("date");
 
@@ -628,6 +704,32 @@ namespace CentralPress.API.Migrations
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime?>("RejectedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("RejectedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("RejectionReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<DateTime?>("ReviewedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ReviewedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
 
                     b.Property<string>("TotalAmountInWordsAr")
                         .IsRequired()
@@ -641,10 +743,14 @@ namespace CentralPress.API.Migrations
 
                     b.HasIndex("AccountId");
 
+                    b.HasIndex("ConfirmedByUserId")
+                        .HasDatabaseName("IX_PaymentOrders_ConfirmedByUserId");
+
                     b.HasIndex("CustomerId");
 
                     b.HasIndex("PaymentOrderNumber")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("IX_PaymentOrders_PaymentOrderNumber_Unique");
 
                     b.ToTable("PaymentOrders");
                 });
@@ -657,6 +763,9 @@ namespace CentralPress.API.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("PaymentLinkId"));
 
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
                     b.Property<int>("PaymentOrderId")
                         .HasColumnType("int");
 
@@ -668,11 +777,67 @@ namespace CentralPress.API.Migrations
 
                     b.HasKey("PaymentLinkId");
 
-                    b.HasIndex("PaymentOrderId");
+                    b.HasIndex("TasweyaId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_PaymentOrderTasweyaLinks_TasweyaId_Active_Unique")
+                        .HasFilter("[IsActive] = 1");
 
-                    b.HasIndex("TasweyaId");
+                    b.HasIndex("PaymentOrderId", "TasweyaId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_PaymentOrderTasweyaLinks_Order_Tasweya_Unique");
 
                     b.ToTable("PaymentOrderTasweyaLinks");
+                });
+
+            modelBuilder.Entity("CentralPress.API.Entities.RefreshToken", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedByIp")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime>("ExpiresAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ReplacedByToken")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTime?>("RevokedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("RevokedByIp")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Token")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Token")
+                        .IsUnique()
+                        .HasDatabaseName("IX_RefreshTokens_Token_Unique");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("IX_RefreshTokens_UserId");
+
+                    b.ToTable("RefreshTokens");
                 });
 
             modelBuilder.Entity("CentralPress.API.Entities.RolePermission", b =>
@@ -703,9 +868,11 @@ namespace CentralPress.API.Migrations
 
                     b.HasKey("RolePermissionId");
 
-                    b.HasIndex("JobTitleId");
-
                     b.HasIndex("ModuleId");
+
+                    b.HasIndex("JobTitleId", "ModuleId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_RolePermissions_JobTitle_Module_Unique");
 
                     b.ToTable("RolePermissions");
                 });
@@ -826,7 +993,14 @@ namespace CentralPress.API.Migrations
 
                     b.HasIndex("AccountId");
 
+                    b.HasIndex("CreatedByUserId")
+                        .HasDatabaseName("IX_Tasweyat_CreatedByUserId");
+
                     b.HasIndex("CustomerId");
+
+                    b.HasIndex("SettlementNumber")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Tasweyat_SettlementNumber_Unique");
 
                     b.ToTable("Tasweyat");
                 });
@@ -849,7 +1023,9 @@ namespace CentralPress.API.Migrations
 
                     b.HasIndex("MoqaysaId");
 
-                    b.HasIndex("TasweyaId");
+                    b.HasIndex("TasweyaId", "MoqaysaId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_TasweyaMoqaysaLinks_Tasweya_Moqaysa_Unique");
 
                     b.ToTable("TasweyaMoqaysaLinks");
                 });
@@ -879,13 +1055,16 @@ namespace CentralPress.API.Migrations
 
                     b.Property<string>("UserId")
                         .IsRequired()
+                        .HasMaxLength(450)
                         .HasColumnType("nvarchar(450)");
 
                     b.HasKey("OverrideId");
 
                     b.HasIndex("ModuleId");
 
-                    b.HasIndex("UserId");
+                    b.HasIndex("UserId", "ModuleId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_UserPermissionOverrides_User_Module_Unique");
 
                     b.ToTable("UserPermissionOverrides");
                 });
@@ -1129,6 +1308,17 @@ namespace CentralPress.API.Migrations
                     b.Navigation("Tasweya");
                 });
 
+            modelBuilder.Entity("CentralPress.API.Entities.RefreshToken", b =>
+                {
+                    b.HasOne("CentralPress.API.Entities.ApplicationUser", "User")
+                        .WithMany("RefreshTokens")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("CentralPress.API.Entities.RolePermission", b =>
                 {
                     b.HasOne("CentralPress.API.Entities.JobTitle", "JobTitle")
@@ -1210,7 +1400,7 @@ namespace CentralPress.API.Migrations
                     b.HasOne("Microsoft.AspNetCore.Identity.IdentityRole", null)
                         .WithMany()
                         .HasForeignKey("RoleId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 
@@ -1219,7 +1409,7 @@ namespace CentralPress.API.Migrations
                     b.HasOne("CentralPress.API.Entities.ApplicationUser", null)
                         .WithMany()
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 
@@ -1228,7 +1418,7 @@ namespace CentralPress.API.Migrations
                     b.HasOne("CentralPress.API.Entities.ApplicationUser", null)
                         .WithMany()
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 
@@ -1237,13 +1427,13 @@ namespace CentralPress.API.Migrations
                     b.HasOne("Microsoft.AspNetCore.Identity.IdentityRole", null)
                         .WithMany()
                         .HasForeignKey("RoleId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.HasOne("CentralPress.API.Entities.ApplicationUser", null)
                         .WithMany()
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 
@@ -1252,7 +1442,7 @@ namespace CentralPress.API.Migrations
                     b.HasOne("CentralPress.API.Entities.ApplicationUser", null)
                         .WithMany()
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 
@@ -1268,6 +1458,8 @@ namespace CentralPress.API.Migrations
             modelBuilder.Entity("CentralPress.API.Entities.ApplicationUser", b =>
                 {
                     b.Navigation("PermissionOverrides");
+
+                    b.Navigation("RefreshTokens");
                 });
 
             modelBuilder.Entity("CentralPress.API.Entities.Customer", b =>

@@ -1,11 +1,12 @@
-using System.Linq;
+using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
-using CentralPress.API.Data;
-using CentralPress.API.Entities;
+using CentralPress.API.DTOs;
 using CentralPress.API.Filters;
+using CentralPress.API.Services;
+using CentralPress.API.ViewModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace CentralPress.API.Controllers;
 
@@ -14,84 +15,128 @@ namespace CentralPress.API.Controllers;
 [Authorize]
 public class MachineriesController : ControllerBase
 {
-    private readonly ApplicationDbContext _context;
+    private readonly IMachineryService _machineryService;
 
-    public MachineriesController(ApplicationDbContext context)
+    public MachineriesController(IMachineryService machineryService)
     {
-        _context = context;
+        _machineryService = machineryService;
     }
-
-    public record MachineryDto(
-        string MachineryNameAr,
-        decimal WorkerHourlyFee,
-        decimal MachineOperatingHourlyFee,
-        int DisplayOrder
-    );
 
     [HttpGet]
     [PermissionAuthorize("MACHINERY", "CanAccess")]
-    public async Task<IActionResult> GetAll([FromQuery] bool activeOnly = false)
+    public async Task<ActionResult<List<MachineryViewModel>>> GetAll(
+        [FromQuery] bool activeOnly = false,
+        CancellationToken ct = default)
     {
-        var query = _context.Machineries.AsQueryable();
-        if (activeOnly)
-            query = query.Where(m => m.IsActive);
-
-        var list = await query
-            .OrderBy(m => m.DisplayOrder)
-            .ThenBy(m => m.MachineryId)
-            .ToListAsync();
-
+        var list = await _machineryService.GetAllAsync(activeOnly, ct);
         return Ok(list);
+    }
+
+    [HttpGet("{id}")]
+    [PermissionAuthorize("MACHINERY", "CanAccess")]
+    public async Task<ActionResult<MachineryViewModel>> GetById(int id, CancellationToken ct)
+    {
+        var item = await _machineryService.GetByIdAsync(id, ct);
+        if (item == null)
+            return NotFound(new { message = "الآلة غير موجودة" });
+
+        return Ok(item);
     }
 
     [HttpPost]
     [PermissionAuthorize("MACHINERY", "CanCreate")]
-    public async Task<IActionResult> Create([FromBody] MachineryDto dto)
+    public async Task<IActionResult> Create(
+        [FromBody] MachineryDto dto,
+        CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(dto.MachineryNameAr))
-            return BadRequest(new { message = "يرجى كتابة اسم الآلة / العملية" });
-
-        var machinery = new Machinery
+        try
         {
-            MachineryNameAr = dto.MachineryNameAr.Trim(),
-            WorkerHourlyFee = dto.WorkerHourlyFee,
-            MachineOperatingHourlyFee = dto.MachineOperatingHourlyFee,
-            DisplayOrder = dto.DisplayOrder > 0 ? dto.DisplayOrder : (_context.Machineries.Max(m => (int?)m.DisplayOrder) ?? 0) + 1,
-            IsActive = true
-        };
-
-        _context.Machineries.Add(machinery);
-        await _context.SaveChangesAsync();
-
-        return Ok(new { message = "تمت إضافة الآلة بنجاح", item = machinery });
+            var item = await _machineryService.CreateAsync(dto, ct);
+            return Ok(new
+            {
+                message = "تمت إضافة الآلة بنجاح",
+                machineryId = item.MachineryId,
+                item
+            });
+        }
+        catch (System.ArgumentOutOfRangeException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (System.ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     [HttpPut("{id}")]
     [PermissionAuthorize("MACHINERY", "CanUpdate")]
-    public async Task<IActionResult> Update(int id, [FromBody] MachineryDto dto)
+    public async Task<IActionResult> Update(
+        int id,
+        [FromBody] MachineryDto dto,
+        CancellationToken ct)
     {
-        var item = await _context.Machineries.FindAsync(id);
-        if (item == null) return NotFound(new { message = "الآلة غير موجودة" });
+        try
+        {
+            var item = await _machineryService.UpdateAsync(id, dto, ct);
+            if (item == null)
+                return NotFound(new { message = "الآلة غير موجودة" });
 
-        item.MachineryNameAr = dto.MachineryNameAr.Trim();
-        item.WorkerHourlyFee = dto.WorkerHourlyFee;
-        item.MachineOperatingHourlyFee = dto.MachineOperatingHourlyFee;
-        if (dto.DisplayOrder > 0) item.DisplayOrder = dto.DisplayOrder;
+            return Ok(new
+            {
+                message = "تم تعديل بيانات الآلة وأجور الساعات بنجاح",
+                item
+            });
+        }
+        catch (System.ArgumentOutOfRangeException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (System.ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
 
-        await _context.SaveChangesAsync();
-        return Ok(new { message = "تم تعديل بيانات الآلة وأجور الساعات بنجاح", item });
+    [HttpPatch("{id}/maintenance-status")]
+    [PermissionAuthorize("MACHINERY", "CanUpdate")]
+    public async Task<IActionResult> UpdateMaintenanceStatus(
+        int id,
+        [FromBody] UpdateMachineryMaintenanceDto dto,
+        CancellationToken ct)
+    {
+        try
+        {
+            var item = await _machineryService.UpdateMaintenanceStatusAsync(id, dto, ct);
+            if (item == null)
+                return NotFound(new { message = "الآلة غير موجودة" });
+
+            return Ok(new
+            {
+                message = "تم تحديث حالة صيانة الآلة بنجاح",
+                item
+            });
+        }
+        catch (System.ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     [HttpPatch("{id}/toggle-active")]
+    [HttpPut("{id}/toggle-active")]
     [PermissionAuthorize("MACHINERY", "CanToggleActive")]
-    public async Task<IActionResult> ToggleActive(int id)
+    public async Task<IActionResult> ToggleActive(int id, CancellationToken ct)
     {
-        var item = await _context.Machineries.FindAsync(id);
-        if (item == null) return NotFound(new { message = "الآلة غير موجودة" });
+        var exists = await _machineryService.GetByIdAsync(id, ct);
+        if (exists == null)
+            return NotFound(new { message = "الآلة غير موجودة" });
 
-        item.IsActive = !item.IsActive;
-        await _context.SaveChangesAsync();
-
-        return Ok(new { message = item.IsActive ? "تم تفعيل الآلة" : "تم تعطيل الآلة", isActive = item.IsActive });
+        var isActive = await _machineryService.ToggleActiveAsync(id, ct);
+        return Ok(new
+        {
+            message = isActive ? "تم تفعيل الآلة" : "تم تعطيل الآلة",
+            isActive
+        });
     }
 }

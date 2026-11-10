@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using CentralPress.API.Entities;
+using CentralPress.API.Helpers;
+using QuestPDF.Drawing;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
@@ -13,10 +16,47 @@ public class PdfExportService
     static PdfExportService()
     {
         QuestPDF.Settings.License = LicenseType.Community;
+
+        // Register embedded / local Arabic TrueType fonts if present in Assets or Fonts folder
+        string[] fontFolders = [
+            Path.Combine(AppContext.BaseDirectory, "Fonts"),
+            Path.Combine(AppContext.BaseDirectory, "Assets")
+        ];
+
+        foreach (var dir in fontFolders)
+        {
+            if (Directory.Exists(dir))
+            {
+                foreach (var file in Directory.GetFiles(dir, "*.ttf"))
+                {
+                    try
+                    {
+                        using var stream = File.OpenRead(file);
+                        FontManager.RegisterFont(stream);
+                    }
+                    catch { }
+                }
+            }
+        }
     }
 
     public byte[] ExportMoqaysaToPdf(Moqaysa m)
     {
+        decimal qty = MoqaysaService.ParseQuantity(m.RequiredQuantityText);
+        decimal finalUnitPrice = qty > 0m
+            ? Math.Round(m.FinalGrandTotal / qty, 2, MidpointRounding.AwayFromZero)
+            : m.FinalGrandTotal;
+
+        string tlvBase64 = ArabicTlvQrHelper.GenerateTlvBase64(
+            "مطبعة جامعة أسيوط المركزية",
+            "AU-GEA-CN-FRM-001",
+            m.CreatedAtUtc,
+            m.FinalGrandTotal,
+            m.VatAmount);
+
+        var materials = (m.MaterialItems ?? new List<MoqaysaMaterialItem>()).ToList();
+        var machineries = (m.MachineryItems ?? new List<MoqaysaMachineryItem>()).ToList();
+
         var document = Document.Create(container =>
         {
             container.Page(page =>
@@ -25,7 +65,7 @@ public class PdfExportService
                 page.Margin(0.6f, Unit.Centimetre);
                 page.PageColor(Colors.White);
                 page.ContentFromRightToLeft();
-                page.DefaultTextStyle(x => x.FontFamily("Arial").FontSize(8).FontColor(Colors.Black));
+                page.DefaultTextStyle(x => x.FontFamily("Cairo", "Tahoma", "Segoe UI", "Arial").FontSize(8).FontColor(Colors.Black));
 
                 page.Header().Column(col =>
                 {
@@ -47,17 +87,18 @@ public class PdfExportService
                         row.RelativeItem(3).AlignCenter().Column(c =>
                         {
                             c.Item().Text($"مقايسة لإذن تشغيل رقم ( {m.JobOrderNumber} )").Bold().FontSize(12).Underline();
-                            c.Item().PaddingTop(2).Text($"الكمية المطلوبة: {m.RequiredQuantityText}").Bold().FontSize(8.5f);
+                            c.Item().PaddingTop(2).Text($"الكمية المطلوبة: {m.RequiredQuantityText} (سعر النسخة: {finalUnitPrice:N2} ج.م)").Bold().FontSize(8.5f);
                         });
 
-                        // Left: Press Seal / ISO Box
+                        // Left: Press Seal / ISO Box with TLV Verification
                         row.RelativeItem(2).AlignLeft().Column(c =>
                         {
                             c.Item().Border(1).BorderColor(Colors.Black).Padding(3).Column(box =>
                             {
-                                box.Item().AlignCenter().Text("A.U.P - مطبعة جامعة أسيوط").Bold().FontSize(8);
-                                box.Item().AlignCenter().Text("نظام الجودة والاعتماد").FontSize(7);
-                                box.Item().AlignCenter().Text("AU-GEA-CN-FRM-001").FontSize(6.5f);
+                                box.Item().AlignCenter().Text("A.U.P - مطبعة جامعة أسيوط").Bold().FontSize(7.5f);
+                                box.Item().AlignCenter().Text("نظام الجودة والاعتماد").FontSize(6.5f);
+                                box.Item().AlignCenter().Text("AU-GEA-CN-FRM-001").FontSize(6f);
+                                box.Item().PaddingTop(1).AlignCenter().Text($"رمز التحقق (TLV): {(tlvBase64.Length > 16 ? tlvBase64[..16] + "..." : tlvBase64)}").FontSize(5.5f);
                             });
                         });
                     });
@@ -122,9 +163,6 @@ public class PdfExportService
                         header.Cell().Border(0.5f).Background(Colors.Grey.Lighten5).Padding(1).AlignCenter().Text("ق").Bold().FontSize(7);
                         header.Cell().Border(0.5f).Background(Colors.Grey.Lighten5).Padding(1).AlignCenter().Text("جنيه").Bold().FontSize(7);
                     });
-
-                    var materials = (m.MaterialItems ?? new List<MoqaysaMaterialItem>()).ToList();
-                    var machineries = (m.MachineryItems ?? new List<MoqaysaMachineryItem>()).ToList();
 
                     // Helper to render a material cell block on left (4 sub-columns: Name, Qty, UnitPrice, Total)
                     void RenderMaterialCells(MoqaysaMaterialItem? mat)
@@ -200,8 +238,17 @@ public class PdfExportService
                         }
                         else
                         {
-                            // Blank cutout on material row 24
-                            table.Cell().ColumnSpan(6).Border(0.5f).Text("");
+                            if (materials.Count > 24)
+                            {
+                                // Indicate overflow to annex page
+                                table.Cell().ColumnSpan(6).Border(0.5f).Background(Colors.Grey.Lighten4).Padding(1).AlignCenter()
+                                    .Text($"يوجد {materials.Count - 23} خامة إضافية مبيّنة بالملحق (ص 2)").Bold().FontSize(7);
+                            }
+                            else
+                            {
+                                // Blank cutout on material row 24
+                                table.Cell().ColumnSpan(6).Border(0.5f).Text("");
+                            }
                         }
                     }
 
@@ -251,8 +298,10 @@ public class PdfExportService
                     RenderPoundPiaster(table, m.FilmsProcessingFee, showDashIfZero: true);
                     RenderEmptyCells(table, 2);
 
-                    // Left: blank cutout covering all remaining cascade lines
-                    table.Cell().ColumnSpan(6).RowSpan(12).Border(0.5f).Text("");
+                    // Left: blank cutout covering all remaining cascade lines dynamically (CRIT-09 / HIGH-17)
+                    bool renderVat = m.ApplyVat || m.VatAmount > 0m;
+                    uint cascadeRowSpan = renderVat ? 13u : 12u;
+                    table.Cell().ColumnSpan(6).RowSpan(cascadeRowSpan).Border(0.5f).Text("");
 
                     // Cascade 4: جملة الخامات
                     table.Cell().Border(0.5f).Background(Colors.Grey.Lighten5).Padding(1).AlignRight().Text("جملة الخامات").Bold();
@@ -314,6 +363,15 @@ public class PdfExportService
                     RenderEmptyCells(table, 5);
                     RenderPoundPiaster(table, m.SubTotal3, isBold: true);
 
+                    // Cascade 14.5: ضريبة القيمة المضافة (14%) - CRIT-09 / HIGH-17 Fix
+                    if (renderVat)
+                    {
+                        table.Cell().Border(0.5f).Padding(1).AlignRight().Text("ض. القيمة المضافة (14%)").Bold();
+                        RenderEmptyCells(table, 3);
+                        RenderPoundPiaster(table, m.VatAmount);
+                        RenderEmptyCells(table, 2);
+                    }
+
                     // Cascade 15: القيمة الإجمالية النهائية
                     table.Cell().Border(0.5f).Background(Colors.Grey.Lighten3).Padding(2).AlignRight().Text("القيمة الإجمالية النهائية").Bold().FontSize(8.5f);
                     RenderEmptyCells(table, 5);
@@ -330,6 +388,70 @@ public class PdfExportService
                     });
                 });
             });
+
+            // MED-06: 2-Tier Material Overflow Strategy (Annex Page)
+            if (materials.Count > 24)
+            {
+                container.Page(annex =>
+                {
+                    annex.Size(PageSizes.A4);
+                    annex.Margin(0.8f, Unit.Centimetre);
+                    annex.PageColor(Colors.White);
+                    annex.ContentFromRightToLeft();
+                    annex.DefaultTextStyle(x => x.FontFamily("Cairo", "Tahoma", "Segoe UI", "Arial").FontSize(8).FontColor(Colors.Black));
+
+                    annex.Header().Column(col =>
+                    {
+                        col.Item().Row(r =>
+                        {
+                            r.RelativeItem().AlignRight().Text("جامعة أسيوط - مطبعة الجامعة المركزية").Bold().FontSize(10);
+                            r.RelativeItem().AlignCenter().Text($"ملحق تفصيلي لخامات مقايسة رقم ( {m.JobOrderNumber} )").Bold().FontSize(12).Underline();
+                            r.RelativeItem().AlignLeft().Text($"الجهة: {m.Customer?.CustomerNameAr ?? "—"}").FontSize(8.5f);
+                        });
+                        col.Item().PaddingTop(3).LineHorizontal(0.5f);
+                    });
+
+                    annex.Content().PaddingTop(6).Table(tbl =>
+                    {
+                        tbl.ColumnsDefinition(cols =>
+                        {
+                            cols.ConstantColumn(25); // م
+                            cols.RelativeColumn(5);  // إسم الصنف
+                            cols.RelativeColumn(2);  // الكمية
+                            cols.RelativeColumn(2);  // سعر الوحدة
+                            cols.RelativeColumn(2);  // الإجمالي
+                        });
+
+                        tbl.Header(h =>
+                        {
+                            h.Cell().Border(0.5f).Background(Colors.Grey.Lighten4).Padding(2).AlignCenter().Text("م").Bold();
+                            h.Cell().Border(0.5f).Background(Colors.Grey.Lighten4).Padding(2).AlignCenter().Text("إسم الصنف / الخامة").Bold();
+                            h.Cell().Border(0.5f).Background(Colors.Grey.Lighten4).Padding(2).AlignCenter().Text("الكمية").Bold();
+                            h.Cell().Border(0.5f).Background(Colors.Grey.Lighten4).Padding(2).AlignCenter().Text("سعر الوحدة").Bold();
+                            h.Cell().Border(0.5f).Background(Colors.Grey.Lighten4).Padding(2).AlignCenter().Text("الإجمالي").Bold();
+                        });
+
+                        int idx = 1;
+                        foreach (var mat in materials)
+                        {
+                            tbl.Cell().Border(0.5f).Padding(2).AlignCenter().Text(idx.ToString());
+                            tbl.Cell().Border(0.5f).Padding(2).AlignRight().Text(mat.MaterialNameSnapshot ?? "—");
+                            tbl.Cell().Border(0.5f).Padding(2).AlignCenter().Text(mat.Quantity.ToString("G"));
+                            tbl.Cell().Border(0.5f).Padding(2).AlignCenter().Text(mat.UnitPrice.ToString("N2"));
+                            tbl.Cell().Border(0.5f).Padding(2).AlignCenter().Text(mat.TotalPrice.ToString("N2"));
+                            idx++;
+                        }
+
+                        tbl.Cell().ColumnSpan(4).Border(0.5f).Background(Colors.Grey.Lighten3).Padding(3).AlignRight().Text("إجمالي قيمة كافة الخامات:").Bold();
+                        tbl.Cell().Border(0.5f).Background(Colors.Grey.Lighten3).Padding(3).AlignCenter().Text($"{m.RawMaterials:N2} ج.م").Bold();
+                    });
+
+                    annex.Footer().AlignCenter().Text(text =>
+                    {
+                        text.Span("صفحة ملحق الخامات - اعتماد مدير التكاليف: .........................").FontSize(8);
+                    });
+                });
+            }
         });
 
         return document.GeneratePdf();
@@ -345,8 +467,9 @@ public class PdfExportService
             return;
         }
 
-        long p = (long)Math.Floor(Math.Abs(amount));
-        long pi = (long)Math.Round((Math.Abs(amount) - p) * 100);
+        long totalPiasters = (long)Math.Round(Math.Abs(amount) * 100m, MidpointRounding.AwayFromZero);
+        long p = totalPiasters / 100L;
+        long pi = totalPiasters % 100L;
 
         var cPi = table.Cell().Border(0.5f).Padding(1).AlignCenter().Text(pi.ToString("D2")).FontSize(7);
         if (isBold) cPi.Bold();
@@ -381,7 +504,7 @@ public class PdfExportService
                 page.Margin(1.0f, Unit.Centimetre);
                 page.PageColor(Colors.White);
                 page.ContentFromRightToLeft();
-                page.DefaultTextStyle(x => x.FontFamily("Arial").FontSize(8).FontColor(Colors.Black));
+                page.DefaultTextStyle(x => x.FontFamily("Cairo", "Tahoma", "Segoe UI", "Arial").FontSize(8).FontColor(Colors.Black));
 
                 page.Header().Column(col =>
                 {
@@ -537,7 +660,14 @@ public class PdfExportService
                 page.Margin(1.2f, Unit.Centimetre);
                 page.PageColor(Colors.White);
                 page.ContentFromRightToLeft();
-                page.DefaultTextStyle(x => x.FontFamily("Arial").FontSize(9).FontColor(Colors.Black));
+                page.DefaultTextStyle(x => x.FontFamily("Cairo", "Tahoma", "Segoe UI", "Arial").FontSize(9).FontColor(Colors.Black));
+
+                string poTlv = ArabicTlvQrHelper.GenerateTlvBase64(
+                    "مطبعة جامعة أسيوط المركزية",
+                    p.PaymentOrderNumber ?? "AU-GEA-CN-FRM-002",
+                    p.PaymentDate.ToDateTime(TimeOnly.MinValue),
+                    p.TotalPaidAmount,
+                    0m);
 
                 page.Header().Column(col =>
                 {
@@ -563,6 +693,7 @@ public class PdfExportService
                         {
                             c.Item().AlignCenter().Text("صندوق المطبعة").Bold().FontSize(12);
                             c.Item().AlignCenter().Text("A.U.P - المركزية").FontSize(7).FontColor(Colors.Grey.Darken1);
+                            c.Item().AlignCenter().Text($"TLV: {(poTlv.Length > 12 ? poTlv[..12] + "..." : poTlv)}").FontSize(5.5f);
                         });
                     });
 
@@ -643,9 +774,9 @@ public class PdfExportService
                         int idx = 1;
                         foreach (var link in p.TasweyaLinks)
                         {
-                            long pVal = (long)Math.Truncate(link.SnapshotTasweyaAmount);
-                            int piVal = (int)Math.Round((link.SnapshotTasweyaAmount - pVal) * 100);
-                            if (piVal < 0) piVal = 0;
+                            long linkTotalPiasters = (long)Math.Round(Math.Abs(link.SnapshotTasweyaAmount) * 100m, MidpointRounding.AwayFromZero);
+                            long pVal = linkTotalPiasters / 100L;
+                            int piVal = (int)(linkTotalPiasters % 100L);
 
                             table.Cell().Border(1).Padding(3).AlignCenter().Text(idx.ToString()).FontSize(9);
                             table.Cell().Border(1).Padding(3).AlignCenter().Text(link.Tasweya?.SettlementNumber ?? "—").Bold().FontSize(9);
@@ -658,9 +789,9 @@ public class PdfExportService
                         }
 
                         // Total Row
-                        long totP = (long)Math.Truncate(p.TotalPaidAmount);
-                        int totPi = (int)Math.Round((p.TotalPaidAmount - totP) * 100);
-                        if (totPi < 0) totPi = 0;
+                        long orderTotalPiasters = (long)Math.Round(Math.Abs(p.TotalPaidAmount) * 100m, MidpointRounding.AwayFromZero);
+                        long totP = orderTotalPiasters / 100L;
+                        int totPi = (int)(orderTotalPiasters % 100L);
 
                         table.Cell().ColumnSpan(4).Border(1.5f).Background(Colors.Grey.Lighten3).Padding(4).AlignRight().PaddingRight(6).Text("إجمالي المبلغ المسدد بأمر الدفع :").Bold().FontSize(10);
                         table.Cell().Border(1.5f).Background(Colors.Grey.Lighten3).Padding(4).AlignCenter().Text(totPi.ToString("D2")).Bold().FontSize(10);

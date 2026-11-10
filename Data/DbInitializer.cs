@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Claims;
 using System.Threading.Tasks;
 using CentralPress.API.Entities;
 using Microsoft.AspNetCore.Identity;
@@ -10,9 +11,20 @@ namespace CentralPress.API.Data;
 
 public static class DbInitializer
 {
-    public static async Task InitializeAsync(ApplicationDbContext context, UserManager<ApplicationUser> userManager)
+    public static async Task InitializeAsync(
+        ApplicationDbContext context,
+        UserManager<ApplicationUser> userManager,
+        RoleManager<IdentityRole> roleManager)
     {
-        await context.Database.EnsureCreatedAsync();
+        // HIGH-25: Use MigrateAsync for relational database, EnsureCreatedAsync for in-memory test databases
+        if (context.Database.IsRelational())
+        {
+            await context.Database.MigrateAsync();
+        }
+        else
+        {
+            await context.Database.EnsureCreatedAsync();
+        }
 
         // 1. Seed Accounts (3 Fixed Accounts)
         if (!await context.Accounts.AnyAsync())
@@ -215,7 +227,56 @@ public static class DbInitializer
             await context.SaveChangesAsync();
         }
 
-        // 6. Seed Admin User
+        // 6. Seed Native Identity Roles & Claims (HIGH-06)
+        string[] standardRoles = { "SuperAdmin", "Admin", "Accountant", "Manager", "Employee" };
+        foreach (var rName in standardRoles)
+        {
+            if (!await roleManager.RoleExistsAsync(rName))
+            {
+                await roleManager.CreateAsync(new IdentityRole(rName));
+            }
+        }
+
+        var adminIdentityRole = await roleManager.FindByNameAsync("Admin");
+        if (adminIdentityRole != null)
+        {
+            var existingClaims = await roleManager.GetClaimsAsync(adminIdentityRole);
+            string[] modules = { "employees", "job_titles", "machinery", "materials", "customers", "moqaysa", "formulas", "tasweya", "payment_orders", "reports" };
+            string[] actions = { "access", "create", "update", "toggleactive" };
+
+            foreach (var m in modules)
+            {
+                foreach (var a in actions)
+                {
+                    var claimVal = $"{m}:{a}";
+                    if (!existingClaims.Any(c => c.Type == "permission" && c.Value == claimVal))
+                    {
+                        await roleManager.AddClaimAsync(adminIdentityRole, new Claim("permission", claimVal));
+                    }
+                }
+            }
+        }
+
+        var accountantRole = await roleManager.FindByNameAsync("Accountant");
+        if (accountantRole != null)
+        {
+            var existingClaims = await roleManager.GetClaimsAsync(accountantRole);
+            string[] accountantPerms =
+            {
+                "tasweya:access", "tasweya:create", "tasweya:update",
+                "payment_orders:access", "payment_orders:create", "payment_orders:update",
+                "reports:access", "customers:access"
+            };
+            foreach (var p in accountantPerms)
+            {
+                if (!existingClaims.Any(c => c.Type == "permission" && c.Value == p))
+                {
+                    await roleManager.AddClaimAsync(accountantRole, new Claim("permission", p));
+                }
+            }
+        }
+
+        // 7. Seed Admin User (CRIT-02: Zero Auto-Reset Backdoor!)
         var adminEmail = "admin@aup.edu.eg";
         var existingAdmin = await userManager.FindByEmailAsync(adminEmail);
         if (existingAdmin == null)
@@ -238,25 +299,19 @@ public static class DbInitializer
             {
                 throw new Exception($"Failed to create admin user: {string.Join(", ", createResult.Errors.Select(e => e.Description))}");
             }
+
+            await userManager.AddToRoleAsync(adminUser, "Admin");
         }
         else
         {
-            // Auto-heal admin credentials: if password differs from Admin@12345, reset it so administrator is never locked out
-            var isPassValid = await userManager.CheckPasswordAsync(existingAdmin, "Admin@12345");
-            if (!isPassValid)
+            // Ensure admin is in Admin role if missing, without altering password or active status
+            if (!await userManager.IsInRoleAsync(existingAdmin, "Admin"))
             {
-                var resetToken = await userManager.GeneratePasswordResetTokenAsync(existingAdmin);
-                await userManager.ResetPasswordAsync(existingAdmin, resetToken, "Admin@12345");
-            }
-
-            if (!existingAdmin.IsActive)
-            {
-                existingAdmin.IsActive = true;
-                await userManager.UpdateAsync(existingAdmin);
+                await userManager.AddToRoleAsync(existingAdmin, "Admin");
             }
         }
 
-        // 7. Seed Sample Materials & Customers if empty
+        // 8. Seed Sample Materials & Customers if empty
         if (!await context.Materials.AnyAsync())
         {
             var materials = new List<Material>

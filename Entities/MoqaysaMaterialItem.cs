@@ -25,7 +25,7 @@ public class MoqaysaMaterialItem
     [Column(TypeName = "decimal(18,3)")]
     public decimal Quantity { get; set; }
 
-    [Column(TypeName = "decimal(18,2)")]
+    [Column(TypeName = "decimal(18,4)")]
     public decimal UnitPrice { get; set; }
 
     [Column(TypeName = "decimal(18,2)")]

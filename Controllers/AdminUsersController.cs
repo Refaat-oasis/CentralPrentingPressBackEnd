@@ -1,303 +1,108 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
+using System.Security.Claims;
+using System.Threading;
 using System.Threading.Tasks;
-using CentralPress.API.Data;
-using CentralPress.API.Entities;
+using CentralPress.API.DTOs;
 using CentralPress.API.Filters;
+using CentralPress.API.Services;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace CentralPress.API.Controllers;
 
 [ApiController]
 [Route("api/admin-users")]
+[Route("api/adminusers")]
 [Authorize]
 public class AdminUsersController : ControllerBase
 {
-    private readonly UserManager<ApplicationUser> _userManager;
-    private readonly ApplicationDbContext _context;
-    private readonly CentralPress.API.Services.IEmailService _emailService;
+    private readonly IAdminUserService _adminUserService;
 
-    public AdminUsersController(
-        UserManager<ApplicationUser> userManager,
-        ApplicationDbContext context,
-        CentralPress.API.Services.IEmailService emailService)
+    public AdminUsersController(IAdminUserService adminUserService)
     {
-        _userManager = userManager;
-        _context = context;
-        _emailService = emailService;
+        _adminUserService = adminUserService;
     }
-
-    public record CreateEmployeeDto(
-        string EmployeeCode,
-        string FullName,
-        string Email,
-        string? DummyPassword,
-        int? JobTitleId,
-        string? PhotoUrl
-    );
-
-    public record UpdateEmployeeDto(
-        string EmployeeCode,
-        string FullName,
-        string Email,
-        int? JobTitleId,
-        string? PhotoUrl
-    );
-
-    public record PermissionOverrideInputDto(
-        int ModuleId,
-        bool? CanAccess,
-        bool? CanCreate,
-        bool? CanUpdate,
-        bool? CanToggleActive
-    );
-
-    public record SaveOverridesDto(
-        List<PermissionOverrideInputDto>? Overrides
-    );
 
     [HttpGet]
     [PermissionAuthorize("EMPLOYEES", "CanAccess")]
-    public async Task<IActionResult> GetAllEmployees()
+    public async Task<IActionResult> GetAllEmployees(CancellationToken cancellationToken)
     {
-        var users = await _context.Users
-            .Include(u => u.JobTitle)
-            .OrderBy(u => u.EmployeeCode)
-            .Select(u => new
-            {
-                u.Id,
-                u.EmployeeCode,
-                u.FullName,
-                u.Email,
-                u.PhotoUrl,
-                u.JobTitleId,
-                JobTitleName = u.JobTitle != null ? u.JobTitle.TitleNameAr : "غير محدد",
-                u.IsActive,
-                u.MustChangePassword,
-                u.CreatedAtUtc
-            })
-            .ToListAsync();
-
+        var users = await _adminUserService.GetAllEmployeesAsync(cancellationToken);
         return Ok(users);
+    }
+
+    [HttpGet("{id}")]
+    [PermissionAuthorize("EMPLOYEES", "CanAccess")]
+    public async Task<IActionResult> GetEmployeeById(string id, CancellationToken cancellationToken)
+    {
+        var user = await _adminUserService.GetEmployeeByIdAsync(id, cancellationToken);
+        if (user == null) return NotFound(new { message = "الموظف غير موجود" });
+        return Ok(user);
     }
 
     [HttpPost]
     [PermissionAuthorize("EMPLOYEES", "CanCreate")]
-    public async Task<IActionResult> CreateEmployee([FromBody] CreateEmployeeDto dto)
+    public async Task<IActionResult> CreateEmployee([FromBody] CreateEmployeeDto dto, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(dto.EmployeeCode) || string.IsNullOrWhiteSpace(dto.FullName) || string.IsNullOrWhiteSpace(dto.Email))
-            return BadRequest(new { message = "يرجى ملء كافة الحقول الأساسية (الكود، الاسم، البريد)" });
+        var (succeeded, message, employee) = await _adminUserService.CreateEmployeeAsync(dto, cancellationToken);
+        if (!succeeded)
+            return BadRequest(new { message });
 
-        if (await _context.Users.AnyAsync(u => u.EmployeeCode == dto.EmployeeCode))
-            return BadRequest(new { message = "كود الموظف مستخدم بالفعل" });
-
-        if (await _context.Users.AnyAsync(u => u.Email == dto.Email))
-            return BadRequest(new { message = "البريد الإلكتروني مستخدم بالفعل" });
-
-        var user = new ApplicationUser
-        {
-            UserName = dto.Email,
-            Email = dto.Email,
-            EmployeeCode = dto.EmployeeCode.Trim(),
-            FullName = dto.FullName.Trim(),
-            JobTitleId = dto.JobTitleId,
-            PhotoUrl = dto.PhotoUrl,
-            MustChangePassword = true, // Forced change on first login
-            IsActive = true,
-            CreatedAtUtc = DateTime.UtcNow
-        };
-
-        var code = "Aup@" + Random.Shared.Next(100000, 999999).ToString();
-        var password = string.IsNullOrWhiteSpace(dto.DummyPassword) ? code : dto.DummyPassword;
-        var result = await _userManager.CreateAsync(user, password);
-        if (!result.Succeeded)
-            return BadRequest(new { message = string.Join(", ", result.Errors.Select(e => e.Description)) });
-
-        var (emailSent, emailErr) = await _emailService.SendNewUserInvitationCodeAsync(user.Email, user.FullName, user.EmployeeCode, password);
-
-        return Ok(new
-        {
-            message = emailSent
-                ? "تمت إضافة الموظف بنجاح وإرسال رمز الدخول المبدئي إلى بريده الإلكتروني"
-                : "تمت إضافة الموظف بنجاح، ولكن تعذر تسليم البريد الإلكتروني (يمكن استخدام رمز الدخول المبدئي أدناه)",
-            userId = user.Id,
-            initialCode = password,
-            emailSent
-        });
+        return Ok(new { message, employee });
     }
 
     [HttpPut("{id}")]
     [PermissionAuthorize("EMPLOYEES", "CanUpdate")]
-    public async Task<IActionResult> UpdateEmployee(string id, [FromBody] UpdateEmployeeDto dto)
+    public async Task<IActionResult> UpdateEmployee(string id, [FromBody] UpdateEmployeeDto dto, CancellationToken cancellationToken)
     {
-        var user = await _userManager.FindByIdAsync(id);
-        if (user == null) return NotFound(new { message = "الموظف غير موجود" });
+        var (succeeded, message) = await _adminUserService.UpdateEmployeeAsync(id, dto, cancellationToken);
+        if (!succeeded)
+            return BadRequest(new { message });
 
-        if (await _context.Users.AnyAsync(u => u.EmployeeCode == dto.EmployeeCode && u.Id != id))
-            return BadRequest(new { message = "كود الموظف مستخدم بالفعل لموظف آخر" });
-
-        if (await _context.Users.AnyAsync(u => u.Email == dto.Email && u.Id != id))
-            return BadRequest(new { message = "البريد الإلكتروني مستخدم بالفعل لموظف آخر" });
-
-        user.EmployeeCode = dto.EmployeeCode.Trim();
-        user.FullName = dto.FullName.Trim();
-        user.Email = dto.Email.Trim();
-        user.UserName = dto.Email.Trim();
-        user.JobTitleId = dto.JobTitleId;
-        user.PhotoUrl = dto.PhotoUrl;
-
-        var result = await _userManager.UpdateAsync(user);
-        if (!result.Succeeded)
-            return BadRequest(new { message = string.Join(", ", result.Errors.Select(e => e.Description)) });
-
-        return Ok(new { message = "تم تعديل بيانات الموظف بنجاح" });
+        return Ok(new { message });
     }
 
     [HttpPatch("{id}/toggle-active")]
+    [HttpPut("{id}/toggle-status")]
     [PermissionAuthorize("EMPLOYEES", "CanToggleActive")]
-    public async Task<IActionResult> ToggleActive(string id)
+    public async Task<IActionResult> ToggleActive(string id, CancellationToken cancellationToken)
     {
-        var user = await _userManager.FindByIdAsync(id);
-        if (user == null) return NotFound(new { message = "الموظف غير موجود" });
+        var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
+        var (succeeded, message, isActive) = await _adminUserService.ToggleActiveAsync(id, currentUserId, cancellationToken);
+        if (!succeeded)
+            return BadRequest(new { message });
 
-        user.IsActive = !user.IsActive;
-        await _userManager.UpdateAsync(user);
-
-        return Ok(new
-        {
-            message = user.IsActive ? "تم تفعيل حساب الموظف" : "تم تعطيل حساب الموظف",
-            isActive = user.IsActive
-        });
+        return Ok(new { message, isActive });
     }
 
     [HttpGet("{id}/overrides")]
     [PermissionAuthorize("EMPLOYEES", "CanAccess")]
-    public async Task<IActionResult> GetUserPermissionOverrides(string id)
+    public async Task<IActionResult> GetUserOverrides(string id, CancellationToken cancellationToken)
     {
-        var overrides = await _context.UserPermissionOverrides
-            .Where(o => o.UserId == id)
-            .ToListAsync();
-
+        var overrides = await _adminUserService.GetUserOverridesAsync(id, cancellationToken);
         return Ok(overrides);
     }
 
-    [HttpPut("{id}/overrides")]
     [HttpPost("{id}/overrides")]
+    [HttpPut("{id}/overrides")]
     [PermissionAuthorize("EMPLOYEES", "CanUpdate")]
-    public async Task<IActionResult> SaveUserPermissionOverrides(string id, [FromBody] SaveOverridesDto dto)
+    public async Task<IActionResult> SaveUserOverrides(string id, [FromBody] SaveOverridesDto dto, CancellationToken cancellationToken)
     {
-        var user = await _userManager.FindByIdAsync(id);
-        if (user == null) return NotFound(new { message = "الموظف غير موجود" });
+        var (succeeded, message) = await _adminUserService.SaveUserOverridesAsync(id, dto, cancellationToken);
+        if (!succeeded)
+            return BadRequest(new { message });
 
-        var existing = await _context.UserPermissionOverrides.Where(o => o.UserId == id).ToListAsync();
-        _context.UserPermissionOverrides.RemoveRange(existing);
-
-        if (dto.Overrides != null)
-        {
-            foreach (var item in dto.Overrides)
-            {
-                _context.UserPermissionOverrides.Add(new UserPermissionOverride
-                {
-                    UserId = id,
-                    ModuleId = item.ModuleId,
-                    CanAccess = item.CanAccess,
-                    CanCreate = item.CanCreate,
-                    CanUpdate = item.CanUpdate,
-                    CanToggleActive = item.CanToggleActive
-                });
-            }
-        }
-
-        await _context.SaveChangesAsync();
-        return Ok(new { message = "تم تحديث الصلاحيات المخصصة للموظف بنجاح" });
-    }
-
-    [HttpPost("{id}/overrides/reset")]
-    [PermissionAuthorize("EMPLOYEES", "CanUpdate")]
-    public async Task<IActionResult> ResetUserPermissionOverrides(string id)
-    {
-        var user = await _userManager.FindByIdAsync(id);
-        if (user == null) return NotFound(new { message = "الموظف غير موجود" });
-
-        var existing = await _context.UserPermissionOverrides.Where(o => o.UserId == id).ToListAsync();
-        _context.UserPermissionOverrides.RemoveRange(existing);
-        await _context.SaveChangesAsync();
-
-        return Ok(new { message = "تمت استعادة الصلاحيات الافتراضية للمسمى الوظيفي بنجاح" });
+        return Ok(new { message });
     }
 
     [HttpDelete("{id}")]
     [PermissionAuthorize("EMPLOYEES", "CanUpdate")]
-    public async Task<IActionResult> DeleteEmployee(string id)
+    public async Task<IActionResult> DeleteEmployee(string id, CancellationToken cancellationToken)
     {
-        var user = await _userManager.FindByIdAsync(id);
-        if (user == null) return NotFound(new { message = "الموظف غير موجود" });
+        var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
+        var (succeeded, message) = await _adminUserService.DeleteEmployeeAsync(id, currentUserId, cancellationToken);
+        if (!succeeded)
+            return BadRequest(new { message });
 
-        if (user.Email == "admin@aup.edu.eg" || user.EmployeeCode == "EMP001")
-            return BadRequest(new { message = "لا يمكن حذف حساب المسؤول الرئيسي للنظام" });
-
-        var overrides = await _context.UserPermissionOverrides.Where(o => o.UserId == id).ToListAsync();
-        if (overrides.Any())
-        {
-            _context.UserPermissionOverrides.RemoveRange(overrides);
-            await _context.SaveChangesAsync();
-        }
-
-        var result = await _userManager.DeleteAsync(user);
-        if (!result.Succeeded)
-            return BadRequest(new { message = string.Join(", ", result.Errors.Select(e => e.Description)) });
-
-        return Ok(new { message = "تم حذف حساب الموظف بنجاح" });
-    }
-
-    [HttpPost("{id}/resend-invitation")]
-    [PermissionAuthorize("EMPLOYEES", "CanCreate")]
-    public async Task<IActionResult> ResendInvitation(string id)
-    {
-        var user = await _userManager.FindByIdAsync(id);
-        if (user == null) return NotFound(new { message = "الموظف غير موجود" });
-
-        var newCode = "Aup@" + Random.Shared.Next(100000, 999999).ToString();
-        var token = await _userManager.GeneratePasswordResetTokenAsync(user);
-        var res = await _userManager.ResetPasswordAsync(user, token, newCode);
-        if (!res.Succeeded)
-            return BadRequest(new { message = string.Join(", ", res.Errors.Select(e => e.Description)) });
-
-        user.MustChangePassword = true;
-        await _userManager.UpdateAsync(user);
-
-        var (emailSent, emailErr) = await _emailService.SendNewUserInvitationCodeAsync(user.Email ?? "", user.FullName ?? "", user.EmployeeCode ?? "", newCode);
-
-        return Ok(new
-        {
-            message = emailSent
-                ? "تمت إعادة إرسال رمز الدخول المبدئي بنجاح إلى البريد الإلكتروني للموظف"
-                : "تم توليد رمز الدخول الجديد ولكن تعذر تسليم البريد الإلكتروني (يمكن نسخ الرمز أدناه)",
-            initialCode = newCode,
-            emailSent
-        });
-    }
-
-    public record TestSmtpRequestDto(string? TargetEmail);
-
-    [HttpPost("test-smtp")]
-    [PermissionAuthorize("EMPLOYEES", "CanAccess")]
-    public async Task<IActionResult> TestSmtp([FromBody] TestSmtpRequestDto? dto)
-    {
-        var target = !string.IsNullOrWhiteSpace(dto?.TargetEmail)
-            ? dto.TargetEmail.Trim()
-            : "ahta601@gmail.com";
-
-        var (success, message, details) = await _emailService.TestSmtpConnectionAsync(target);
-        if (!success)
-        {
-            return BadRequest(new { message, details, success = false });
-        }
-
-        return Ok(new { message, success = true });
+        return Ok(new { message });
     }
 }

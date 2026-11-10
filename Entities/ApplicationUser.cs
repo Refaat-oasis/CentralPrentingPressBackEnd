@@ -27,12 +27,16 @@ public class ApplicationUser : IdentityUser
 
     public bool IsActive { get; set; } = true;
 
-    [MaxLength(10)]
-    public string? PasswordResetCode { get; set; }
+    [MaxLength(128)]
+    public string? PasswordResetCodeHash { get; set; }
 
     public DateTime? PasswordResetCodeExpiryUtc { get; set; }
+
+    public int PasswordResetFailedAttempts { get; set; } = 0;
 
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
 
     public virtual ICollection<UserPermissionOverride> PermissionOverrides { get; set; } = new List<UserPermissionOverride>();
+
+    public virtual ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
 }

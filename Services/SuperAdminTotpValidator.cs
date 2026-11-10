@@ -1,6 +1,7 @@
 using System;
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 
 namespace CentralPress.API.Services;
@@ -8,11 +9,17 @@ namespace CentralPress.API.Services;
 public class SuperAdminTotpValidator
 {
     private readonly string _masterSecret;
+    private readonly IMemoryCache _cache;
 
-    public SuperAdminTotpValidator(IConfiguration configuration)
+    public SuperAdminTotpValidator(IConfiguration configuration, IMemoryCache cache)
     {
-        _masterSecret = configuration["SuperAdmin:MasterSecret"] 
-            ?? "ASSIUT_UNIV_CENTRAL_PRESS_SUPERADMIN_2026_SECRET_KEY_998877";
+        _cache = cache;
+        var secret = configuration["SuperAdmin:MasterSecret"];
+        if (string.IsNullOrWhiteSpace(secret))
+        {
+            throw new InvalidOperationException("SuperAdmin:MasterSecret is not configured. Hardcoded fallback secrets are prohibited.");
+        }
+        _masterSecret = secret;
     }
 
     public string GenerateCodeForUtc(DateTime utcTime)
@@ -24,20 +31,43 @@ public class SuperAdminTotpValidator
         return numeric.ToString("D8");
     }
 
-    public bool ValidateCode(string? code)
+    public bool ValidateAndConsumeCode(string? code)
     {
         if (string.IsNullOrWhiteSpace(code)) return false;
         code = code.Trim();
 
         var utcNow = DateTime.UtcNow;
 
-        // Current hour
-        if (GenerateCodeForUtc(utcNow) == code) return true;
+        // Check if code matches current hour
+        string currentCode = GenerateCodeForUtc(utcNow);
+        bool matches = CryptographicOperations.FixedTimeEquals(
+            Encoding.UTF8.GetBytes(code),
+            Encoding.UTF8.GetBytes(currentCode));
 
-        // Tolerance window of previous and next hour for boundary safety
-        if (GenerateCodeForUtc(utcNow.AddHours(-1)) == code) return true;
-        if (GenerateCodeForUtc(utcNow.AddHours(1)) == code) return true;
+        // Allow previous hour ONLY within the first 3 minutes of the hour (clock skew grace period)
+        if (!matches && utcNow.Minute < 3)
+        {
+            string prevCode = GenerateCodeForUtc(utcNow.AddHours(-1));
+            matches = CryptographicOperations.FixedTimeEquals(
+                Encoding.UTF8.GetBytes(code),
+                Encoding.UTF8.GetBytes(prevCode));
+        }
 
-        return false;
+        if (!matches) return false;
+
+        // Replay Prevention: check if code was already consumed
+        string cacheKey = $"TOTP_CONSUMED_{code}";
+        if (_cache.TryGetValue(cacheKey, out _))
+        {
+            return false; // Code already used!
+        }
+
+        // Mark code as consumed until the end of the current hour + 5 minutes buffer
+        var remainingMinutesInHour = 60 - utcNow.Minute + 5;
+        _cache.Set(cacheKey, true, TimeSpan.FromMinutes(remainingMinutesInHour));
+
+        return true;
     }
+
+    public bool ValidateCode(string? code) => ValidateAndConsumeCode(code);
 }

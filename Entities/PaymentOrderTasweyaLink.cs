@@ -20,4 +20,6 @@ public class PaymentOrderTasweyaLink
 
     [Column(TypeName = "decimal(18,2)")]
     public decimal SnapshotTasweyaAmount { get; set; }
+
+    public bool IsActive { get; set; } = true;
 }

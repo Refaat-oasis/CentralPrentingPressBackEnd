@@ -1,152 +1,116 @@
 using System.Collections.Generic;
-using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
-using CentralPress.API.Data;
-using CentralPress.API.Entities;
+using CentralPress.API.DTOs;
 using CentralPress.API.Filters;
+using CentralPress.API.Services;
+using CentralPress.API.ViewModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace CentralPress.API.Controllers;
 
 [ApiController]
 [Route("api/job-titles")]
+[Route("api/jobtitles")]
 [Authorize]
 public class JobTitlesController : ControllerBase
 {
-    private readonly ApplicationDbContext _context;
+    private readonly IJobTitleService _jobTitleService;
 
-    public JobTitlesController(ApplicationDbContext context)
+    public JobTitlesController(IJobTitleService jobTitleService)
     {
-        _context = context;
+        _jobTitleService = jobTitleService;
     }
-
-    public record JobTitleDto(string TitleNameAr, string? Description);
-    public record RolePermissionInputDto(int ModuleId, bool CanAccess, bool CanCreate, bool CanUpdate, bool CanToggleActive);
 
     [HttpGet]
     [PermissionAuthorize("JOB_TITLES", "CanAccess")]
-    public async Task<IActionResult> GetAll()
+    public async Task<IActionResult> GetAll(CancellationToken cancellationToken)
     {
-        var titles = await _context.JobTitles
-            .OrderBy(j => j.JobTitleId)
-            .Select(j => new
-            {
-                j.JobTitleId,
-                j.TitleNameAr,
-                j.Description,
-                j.IsActive,
-                EmployeesCount = j.Users.Count
-            })
-            .ToListAsync();
-
+        var titles = await _jobTitleService.GetAllAsync(cancellationToken);
         return Ok(titles);
+    }
+
+    [HttpGet("{id:int}")]
+    [PermissionAuthorize("JOB_TITLES", "CanAccess")]
+    public async Task<IActionResult> GetById(int id, CancellationToken cancellationToken)
+    {
+        var title = await _jobTitleService.GetByIdAsync(id, cancellationToken);
+        if (title == null) return NotFound(new { message = "المسمى الوظيفي غير موجود" });
+        return Ok(title);
     }
 
     [HttpPost]
     [PermissionAuthorize("JOB_TITLES", "CanCreate")]
-    public async Task<IActionResult> Create([FromBody] JobTitleDto dto)
+    public async Task<IActionResult> Create([FromBody] JobTitleDto dto, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(dto.TitleNameAr))
-            return BadRequest(new { message = "يرجى كتابة اسم المسمى الوظيفي" });
+        var (succeeded, message, titleId) = await _jobTitleService.CreateAsync(dto, cancellationToken);
+        if (!succeeded)
+            return BadRequest(new { message });
 
-        var title = new JobTitle
-        {
-            TitleNameAr = dto.TitleNameAr.Trim(),
-            Description = dto.Description?.Trim(),
-            IsActive = true
-        };
-
-        _context.JobTitles.Add(title);
-        await _context.SaveChangesAsync();
-
-        return Ok(new { message = "تمت إضافة المسمى الوظيفي بنجاح", titleId = title.JobTitleId });
+        return Ok(new { message, titleId });
     }
 
-    [HttpPut("{id}")]
+    [HttpPut("{id:int}")]
     [PermissionAuthorize("JOB_TITLES", "CanUpdate")]
-    public async Task<IActionResult> Update(int id, [FromBody] JobTitleDto dto)
+    public async Task<IActionResult> Update(int id, [FromBody] JobTitleDto dto, CancellationToken cancellationToken)
     {
-        var title = await _context.JobTitles.FindAsync(id);
-        if (title == null) return NotFound(new { message = "المسمى الوظيفي غير موجود" });
+        var (succeeded, message) = await _jobTitleService.UpdateAsync(id, dto, cancellationToken);
+        if (!succeeded)
+            return BadRequest(new { message });
 
-        title.TitleNameAr = dto.TitleNameAr.Trim();
-        title.Description = dto.Description?.Trim();
-
-        await _context.SaveChangesAsync();
-        return Ok(new { message = "تم تعديل المسمى الوظيفي بنجاح" });
+        return Ok(new { message });
     }
 
-    [HttpPatch("{id}/toggle-active")]
+    [HttpPatch("{id:int}/toggle-active")]
     [PermissionAuthorize("JOB_TITLES", "CanToggleActive")]
-    public async Task<IActionResult> ToggleActive(int id)
+    public async Task<IActionResult> ToggleActive(int id, CancellationToken cancellationToken)
     {
-        var title = await _context.JobTitles.FindAsync(id);
-        if (title == null) return NotFound(new { message = "المسمى الوظيفي غير موجود" });
+        var (succeeded, message, isActive) = await _jobTitleService.ToggleActiveAsync(id, cancellationToken);
+        if (!succeeded)
+            return BadRequest(new { message });
 
-        title.IsActive = !title.IsActive;
-        await _context.SaveChangesAsync();
-
-        return Ok(new { message = title.IsActive ? "تم تفعيل المسمى الوظيفي" : "تم تعطيل المسمى الوظيفي", isActive = title.IsActive });
+        return Ok(new { message, isActive });
     }
 
-    [HttpGet("{id}/permissions")]
+    [HttpGet("{id:int}/permissions")]
     [PermissionAuthorize("JOB_TITLES", "CanAccess")]
-    public async Task<IActionResult> GetRolePermissions(int id)
+    public async Task<IActionResult> GetRolePermissions(int id, CancellationToken cancellationToken)
     {
-        var title = await _context.JobTitles.FindAsync(id);
-        if (title == null) return NotFound(new { message = "المسمى الوظيفي غير موجود" });
-
-        var modules = await _context.SystemModules.Where(m => m.IsActive).ToListAsync();
-        var existingPermissions = await _context.RolePermissions.Where(r => r.JobTitleId == id).ToListAsync();
-
-        var matrix = modules.Select(m =>
-        {
-            var p = existingPermissions.FirstOrDefault(ep => ep.ModuleId == m.ModuleId);
-            return new
-            {
-                m.ModuleId,
-                m.ModuleKey,
-                m.ModuleNameAr,
-                CanAccess = p?.CanAccess ?? false,
-                CanCreate = p?.CanCreate ?? false,
-                CanUpdate = p?.CanUpdate ?? false,
-                CanToggleActive = p?.CanToggleActive ?? false
-            };
-        }).ToList();
-
-        return Ok(new
-        {
-            jobTitle = new { title.JobTitleId, title.TitleNameAr },
-            permissions = matrix
-        });
+        var matrix = await _jobTitleService.GetRolePermissionsAsync(id, cancellationToken);
+        if (matrix == null) return NotFound(new { message = "المسمى الوظيفي غير موجود" });
+        return Ok(matrix);
     }
 
-    [HttpPost("{id}/permissions")]
+    [HttpPost("{id:int}/permissions")]
     [PermissionAuthorize("JOB_TITLES", "CanUpdate")]
-    public async Task<IActionResult> SaveRolePermissions(int id, [FromBody] List<RolePermissionInputDto> permissions)
+    public async Task<IActionResult> SaveRolePermissions(int id, [FromBody] List<RolePermissionInputDto> permissions, CancellationToken cancellationToken)
     {
-        var title = await _context.JobTitles.FindAsync(id);
-        if (title == null) return NotFound(new { message = "المسمى الوظيفي غير موجود" });
+        var (succeeded, message) = await _jobTitleService.SaveRolePermissionsAsync(id, permissions, cancellationToken);
+        if (!succeeded)
+            return BadRequest(new { message });
 
-        var existing = await _context.RolePermissions.Where(r => r.JobTitleId == id).ToListAsync();
-        _context.RolePermissions.RemoveRange(existing);
+        return Ok(new { message });
+    }
 
-        foreach (var p in permissions)
-        {
-            _context.RolePermissions.Add(new RolePermission
-            {
-                JobTitleId = id,
-                ModuleId = p.ModuleId,
-                CanAccess = p.CanAccess,
-                CanCreate = p.CanCreate,
-                CanUpdate = p.CanUpdate,
-                CanToggleActive = p.CanToggleActive
-            });
-        }
+    // HIGH-08: Dedicated system modules endpoint
+    [HttpGet("modules")]
+    [Authorize]
+    public async Task<IActionResult> GetSystemModules(CancellationToken cancellationToken)
+    {
+        var modules = await _jobTitleService.GetSystemModulesAsync(cancellationToken);
+        return Ok(new { permissions = modules });
+    }
 
-        await _context.SaveChangesAsync();
-        return Ok(new { message = "تم حفظ مصفوفة الصلاحيات بنجاح" });
+    // MED-06: Safe role deletion preventing orphaned employees
+    [HttpDelete("{id:int}")]
+    [PermissionAuthorize("JOB_TITLES", "CanUpdate")]
+    public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken)
+    {
+        var (succeeded, message) = await _jobTitleService.DeleteAsync(id, cancellationToken);
+        if (!succeeded)
+            return BadRequest(new { message });
+
+        return Ok(new OperationStatusViewModel { Success = true, Message = message });
     }
 }

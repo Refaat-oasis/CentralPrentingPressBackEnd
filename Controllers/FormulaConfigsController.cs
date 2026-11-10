@@ -1,12 +1,12 @@
 using System.Collections.Generic;
-using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
-using CentralPress.API.Data;
-using CentralPress.API.Entities;
+using CentralPress.API.DTOs;
 using CentralPress.API.Filters;
+using CentralPress.API.Services;
+using CentralPress.API.ViewModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace CentralPress.API.Controllers;
 
@@ -16,53 +16,39 @@ namespace CentralPress.API.Controllers;
 [Authorize]
 public class FormulaConfigsController : ControllerBase
 {
-    private readonly ApplicationDbContext _context;
+    private readonly IFormulaConfigService _formulaConfigService;
 
-    public FormulaConfigsController(ApplicationDbContext context)
+    public FormulaConfigsController(IFormulaConfigService formulaConfigService)
     {
-        _context = context;
+        _formulaConfigService = formulaConfigService;
     }
-
-    public record UpdateFormulaConfigDto(
-        int FormulaConfigId,
-        decimal DefaultPercentage,
-        string? WorkersFundBaseMode,
-        string? AllowedOptionsCsv
-    );
 
     [HttpGet]
     [PermissionAuthorize("FORMULAS", "CanAccess")]
-    public async Task<IActionResult> GetAll()
+    public async Task<ActionResult<List<FormulaConfigViewModel>>> GetAll(CancellationToken ct)
     {
-        var list = await _context.CostingFormulaConfigs
-            .OrderBy(c => c.StepOrder)
-            .ToListAsync();
-
+        var list = await _formulaConfigService.GetAllAsync(ct);
         return Ok(list);
     }
 
     [HttpPut]
     [PermissionAuthorize("FORMULAS", "CanUpdate")]
-    public async Task<IActionResult> UpdateConfigs([FromBody] List<UpdateFormulaConfigDto> items)
+    public async Task<IActionResult> UpdateConfigs(
+        [FromBody] List<UpdateFormulaConfigDto> items,
+        CancellationToken ct)
     {
-        foreach (var item in items)
+        try
         {
-            var config = await _context.CostingFormulaConfigs.FindAsync(item.FormulaConfigId);
-            if (config != null)
-            {
-                config.DefaultPercentage = item.DefaultPercentage;
-                if (!string.IsNullOrWhiteSpace(item.WorkersFundBaseMode))
-                {
-                    config.WorkersFundBaseMode = item.WorkersFundBaseMode;
-                }
-                if (item.AllowedOptionsCsv != null)
-                {
-                    config.AllowedOptionsCsv = item.AllowedOptionsCsv.Trim();
-                }
-            }
+            await _formulaConfigService.UpdateConfigsAsync(items, ct);
+            return Ok(new { message = "تم حفظ إعدادات نسب ومعادلات المقايسة بنجاح" });
         }
-
-        await _context.SaveChangesAsync();
-        return Ok(new { message = "تم حفظ إعدادات نسب ومعادلات المقايسة بنجاح" });
+        catch (System.ArgumentOutOfRangeException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (System.ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 }

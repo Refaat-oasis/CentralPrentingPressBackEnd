@@ -23,6 +23,9 @@ public class AccountEntity
     [MaxLength(250)]
     public string DebitHeaderTextAr { get; set; } = string.Empty; // e.g. "من حـ / الإدارة العامة"
 
+    [Column(TypeName = "decimal(18,2)")]
+    public decimal? BudgetCeiling { get; set; }
+
     public bool IsActive { get; set; } = true;
 
     public virtual ICollection<Customer> Customers { get; set; } = new List<Customer>();
