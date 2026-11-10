@@ -62,6 +62,9 @@ public class WordExportService
             decimal finalUnitPrice = qty > 0m
                 ? Math.Round(m.FinalGrandTotal / qty, 2, MidpointRounding.AwayFromZero)
                 : m.FinalGrandTotal;
+            decimal unitPriceBeforeVat = qty > 0m
+                ? Math.Round(m.SubTotal3 / qty, 2, MidpointRounding.AwayFromZero)
+                : m.SubTotal3;
 
             // Customer & Specifications (MED-07: Unit price included)
             var pMeta = new Paragraph(
@@ -102,6 +105,7 @@ public class WordExportService
             );
             table.AppendChild(tblPr);
 
+
             // Add Header Rows
             table.AppendChild(CreateCascadeWordRow("عناصر المقايسة والحساب", "جزئي", "كلي", "الخامــــــــــــات", isHeader: true));
             table.AppendChild(CreateCascadeWordRow("البيان", "ق / جنيه", "ق / جنيه", "الصنف / الكمية / السعر", isHeader: true));
@@ -116,7 +120,7 @@ public class WordExportService
             table.AppendChild(CreateCascadeWordRow("الخامات الأولية", m.RawMaterials, null, $"إجمالي الخامات: {m.RawMaterials:F2} ج.م"));
 
             // Cascade 2: Material Processing Fee
-            table.AppendChild(CreateCascadeWordRow("م. تشغيل الخامات (5.5%)", m.MaterialProcessingFee, null));
+            table.AppendChild(CreateCascadeWordRow("م. تشغيل الخامات", m.MaterialProcessingFee, null));
 
             // Cascade 3: Films
             if (m.FilmsProcessingFee > 0)
@@ -129,40 +133,44 @@ public class WordExportService
             table.AppendChild(CreateCascadeWordRow("الإجمالي (1)", null, m.SubTotal1, isBold: true));
 
             // Cascade 6: Admin Expenses
-            table.AppendChild(CreateCascadeWordRow($"مصروفات إدارية {(m.ApplyAdminExpenses ? "(8.5%)" : "")}", m.ApplyAdminExpenses ? m.AdminExpenses : null, null));
+            table.AppendChild(CreateCascadeWordRow("مصروفات إدارية", m.ApplyAdminExpenses ? m.AdminExpenses : null, null));
 
             // Cascade 7: Total Expenses
             table.AppendChild(CreateCascadeWordRow("إجمالي المصروفات", null, m.TotalExpenses, isBold: true));
 
             // Cascade 8: Markup
-            table.AppendChild(CreateCascadeWordRow($"النسبة {(m.ApplyMarkup ? $"({m.SelectedMarkupPercent}%)" : "")}", m.ApplyMarkup ? m.MarkupAmount : null, null));
+            table.AppendChild(CreateCascadeWordRow("النسبة", m.ApplyMarkup ? m.MarkupAmount : null, null));
 
             // Cascade 9: Total After Markup
             table.AppendChild(CreateCascadeWordRow("الجملة", null, m.TotalAfterMarkup, isBold: true));
 
             // Cascade 10: Ministry of Finance
-            table.AppendChild(CreateCascadeWordRow("وزارة المالية (15%)", m.MinistryOfFinanceFee, null));
+            table.AppendChild(CreateCascadeWordRow("وزارة المالية", m.MinistryOfFinanceFee, null));
 
             // Cascade 11: Workers Fund
-            table.AppendChild(CreateCascadeWordRow("ص. ت. العاملين (10%)", m.WorkersSyndicateFund, null));
+            table.AppendChild(CreateCascadeWordRow("ص. ت. العاملين", m.WorkersSyndicateFund, null));
 
             // Cascade 12: Subtotal 2
             table.AppendChild(CreateCascadeWordRow("الإجمالي (2)", null, m.SubTotal2, isBold: true));
 
             // Cascade 13: Other
             if (m.ApplyOther)
-                table.AppendChild(CreateCascadeWordRow("أخرى (10%)", m.OtherAmount, null));
+                table.AppendChild(CreateCascadeWordRow("أخرى", m.OtherAmount, null));
 
             // Cascade 14: Subtotal 3
             table.AppendChild(CreateCascadeWordRow("إجمالي (3)", null, m.SubTotal3, isBold: true));
 
             // Cascade 15: VAT
             if (m.ApplyVat || m.VatAmount > 0)
-                table.AppendChild(CreateCascadeWordRow("ض. القيمة المضافة (14%)", m.VatAmount, null));
+                table.AppendChild(CreateCascadeWordRow($"ض. القيمة المضافة ({(m.SelectedVatPercent > 0 ? m.SelectedVatPercent : 14)}%)", m.VatAmount, null));
 
             // Final Grand Total & Unit Price
             table.AppendChild(CreateCascadeWordRow("القيمة الإجمالية النهائية", null, m.FinalGrandTotal, isBold: true));
-            table.AppendChild(CreateCascadeWordRow("سعر النسخة النهائي (شامل ض.ق.م)", null, finalUnitPrice, isBold: true));
+            if (unitPriceBeforeVat > 0)
+                table.AppendChild(CreateCascadeWordRow("سعر الوحدة (قبل ض.ق.م)", null, unitPriceBeforeVat, isBold: true));
+            if (finalUnitPrice > 0)
+                table.AppendChild(CreateCascadeWordRow("سعر النسخة النهائي (شامل ض.ق.م)", null, finalUnitPrice, isBold: true));
+
 
             body.Append(table);
 
@@ -481,6 +489,18 @@ public class WordExportService
         string pStr = partialAmount.HasValue ? $"{partialAmount.Value:F2}" : "-";
         string tStr = totalAmount.HasValue ? $"{totalAmount.Value:F2}" : "-";
         return CreateCascadeWordRow(label, pStr, tStr, note, isHeader: false, isBold: isBold);
+    }
+
+    private static decimal ParseQuantity(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return 0m;
+        var clean = text.Replace(",", "").Replace("،", "").Trim();
+        var match = System.Text.RegularExpressions.Regex.Match(clean, @"\d+(\.\d+)?");
+        if (match.Success && decimal.TryParse(match.Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var qty))
+        {
+            return qty;
+        }
+        return 0m;
     }
 
     private static TableRow CreateCascadeWordRow(string label, string partialStr, string totalStr, string note = "", bool isHeader = false, bool isBold = false)

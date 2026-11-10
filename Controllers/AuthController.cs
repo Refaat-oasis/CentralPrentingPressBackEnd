@@ -132,4 +132,37 @@ public class AuthController : ControllerBase
 
         return Ok(result);
     }
+
+    [Authorize]
+    [HttpPost("logout")]
+    public async Task<IActionResult> Logout(CancellationToken cancellationToken)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!string.IsNullOrEmpty(userId) && !User.IsInRole("SuperAdmin"))
+        {
+            await _authService.LogoutAsync(userId, cancellationToken);
+        }
+
+        return Ok(new { message = "تم تسجيل الخروج بنجاح وتحرير الجلسة" });
+    }
+
+    [HttpPost("terminate-session")]
+    public async Task<IActionResult> TerminateSession([FromQuery] string? token, CancellationToken cancellationToken)
+    {
+        var tokenStr = token;
+        if (string.IsNullOrEmpty(tokenStr) && Request.Headers.TryGetValue("Authorization", out var authHeader))
+        {
+            tokenStr = authHeader.ToString().Replace("Bearer ", "").Trim();
+        }
+
+        await _authService.TerminateSessionAsync(tokenStr, cancellationToken);
+        return Ok(new { terminated = true });
+    }
+
+    [Authorize]
+    [HttpGet("heartbeat")]
+    public IActionResult Heartbeat()
+    {
+        return Ok(new { active = true });
+    }
 }

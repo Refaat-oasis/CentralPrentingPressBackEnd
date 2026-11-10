@@ -36,8 +36,13 @@ public class MoqaysaCalculationService
         var res = new MoqaysaCalculationResult
         {
             RawMaterials = Round2(input.RawMaterials),
+            FilmsProcessingFee = Round2(input.FilmsProcessingFee),
             MaterialProcessingPercent = input.MaterialProcessingPercent,
-            FilmsProcessingFee = Round2(input.FilmsProcessingFee)
+            AdminExpensesPercent = input.AdminExpensesPercent,
+            MinistryOfFinancePercent = input.MinistryOfFinancePercent,
+            WorkersFundPercent = input.WorkersFundPercent,
+            OtherPercent = input.OtherPercent,
+            VatPercent = input.VatPercent
         };
 
         // 28. م. تشغيل الخامات (5.5%)

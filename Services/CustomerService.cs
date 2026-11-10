@@ -196,9 +196,7 @@ public class CustomerService : ICustomerService
             AccountId = nextId,
             AccountCode = accountCode,
             AccountNameAr = dto.AccountNameAr.Trim(),
-            DebitHeaderTextAr = string.IsNullOrWhiteSpace(dto.DebitHeaderTextAr)
-                ? $"من حـ / {dto.AccountNameAr.Trim()}"
-                : dto.DebitHeaderTextAr.Trim(),
+            DebitHeaderTextAr = FormatDebitHeaderText(dto.DebitHeaderTextAr, dto.AccountNameAr),
             IsActive = true
         };
 
@@ -230,10 +228,17 @@ public class CustomerService : ICustomerService
 
         account.AccountNameAr = dto.AccountNameAr.Trim();
         if (!string.IsNullOrWhiteSpace(dto.DebitHeaderTextAr))
-            account.DebitHeaderTextAr = dto.DebitHeaderTextAr.Trim();
+            account.DebitHeaderTextAr = FormatDebitHeaderText(dto.DebitHeaderTextAr, dto.AccountNameAr);
 
         await _context.SaveChangesAsync(ct);
         return MapToAccountViewModel(account);
+    }
+
+    private static string FormatDebitHeaderText(string? text, string fallbackName)
+    {
+        var raw = string.IsNullOrWhiteSpace(text) ? fallbackName : text.Trim();
+        var cleaned = System.Text.RegularExpressions.Regex.Replace(raw, @"^من\s*حـ?\s*[\/\\:]\s*", "").Trim();
+        return $"من حـ / {cleaned}";
     }
 
     public async Task<bool> ToggleAccountActiveAsync(int id, CancellationToken ct = default)

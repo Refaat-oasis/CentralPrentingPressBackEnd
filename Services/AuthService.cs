@@ -332,6 +332,51 @@ public class AuthService : IAuthService
         };
     }
 
+    public async Task LogoutAsync(string? userId, CancellationToken cancellationToken = default)
+    {
+        if (!string.IsNullOrEmpty(userId))
+        {
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user != null)
+            {
+                user.CurrentSessionId = null;
+                user.LastActivityUtc = null;
+                await _userManager.UpdateAsync(user);
+            }
+        }
+    }
+
+    public async Task TerminateSessionAsync(string? token, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrEmpty(token)) return;
+
+        try
+        {
+            var handler = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler();
+            if (handler.CanReadToken(token))
+            {
+                var jwt = handler.ReadJwtToken(token);
+                var userId = jwt.Claims.FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.NameIdentifier || c.Type == "sub")?.Value;
+                var sessionId = jwt.Claims.FirstOrDefault(c => c.Type == "SessionId")?.Value;
+
+                if (!string.IsNullOrEmpty(userId))
+                {
+                    var user = await _userManager.FindByIdAsync(userId);
+                    if (user != null && (sessionId == null || user.CurrentSessionId == sessionId))
+                    {
+                        user.CurrentSessionId = null;
+                        user.LastActivityUtc = null;
+                        await _userManager.UpdateAsync(user);
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // Ignore any error during browser unload
+        }
+    }
+
     private static string ComputeOtpHash(string email, string code)
     {
         var input = $"{email.ToLowerInvariant()}:{code.Trim()}:CentralPressSecuritySalt2026";

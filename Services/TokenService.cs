@@ -51,13 +51,23 @@ public class TokenService : ITokenService
             roles.Add("Employee");
         }
 
+        var sessionId = Guid.NewGuid().ToString();
+        if (!isSuperAdmin)
+        {
+            user.CurrentSessionId = sessionId;
+            user.LastActivityUtc = DateTime.UtcNow;
+            user.SessionStartedUtc = DateTime.UtcNow;
+            await _userManager.UpdateAsync(user);
+        }
+
         var claims = new List<Claim>
         {
             new(ClaimTypes.NameIdentifier, user.Id),
             new(ClaimTypes.Email, user.Email ?? string.Empty),
             new("EmployeeCode", user.EmployeeCode ?? string.Empty),
             new("FullName", user.FullName ?? string.Empty),
-            new("JobTitle", user.JobTitle?.TitleNameAr ?? string.Empty)
+            new("JobTitle", user.JobTitle?.TitleNameAr ?? string.Empty),
+            new("SessionId", isSuperAdmin ? "SUPERADMIN_SESSION" : sessionId)
         };
 
         foreach (var role in roles)
@@ -187,13 +197,20 @@ public class TokenService : ITokenService
         var roles = (await _userManager.GetRolesAsync(user)).ToList();
         if (!roles.Any()) roles.Add("Employee");
 
+        var sessionId = Guid.NewGuid().ToString();
+        user.CurrentSessionId = sessionId;
+        user.LastActivityUtc = DateTime.UtcNow;
+        user.SessionStartedUtc = DateTime.UtcNow;
+        await _userManager.UpdateAsync(user);
+
         var claims = new List<Claim>
         {
             new(ClaimTypes.NameIdentifier, user.Id),
             new(ClaimTypes.Email, user.Email ?? string.Empty),
             new("EmployeeCode", user.EmployeeCode ?? string.Empty),
             new("FullName", user.FullName ?? string.Empty),
-            new("JobTitle", user.JobTitle?.TitleNameAr ?? string.Empty)
+            new("JobTitle", user.JobTitle?.TitleNameAr ?? string.Empty),
+            new("SessionId", sessionId)
         };
         foreach (var role in roles) claims.Add(new Claim(ClaimTypes.Role, role));
 

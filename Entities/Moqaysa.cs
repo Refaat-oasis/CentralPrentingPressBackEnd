@@ -29,6 +29,9 @@ public class Moqaysa
     [Column(TypeName = "decimal(18,2)")]
     public decimal RawMaterials { get; set; }
 
+    [Column(TypeName = "decimal(8,4)")]
+    public decimal SelectedMaterialProcessingPercent { get; set; } = 5.5m;
+
     [Column(TypeName = "decimal(18,2)")]
     public decimal MaterialProcessingFee { get; set; }
 
@@ -49,6 +52,9 @@ public class Moqaysa
 
     public bool ApplyAdminExpenses { get; set; }
 
+    [Column(TypeName = "decimal(8,4)")]
+    public decimal SelectedAdminExpensesPercent { get; set; } = 8.5m;
+
     [Column(TypeName = "decimal(18,2)")]
     public decimal AdminExpenses { get; set; }
 
@@ -66,8 +72,14 @@ public class Moqaysa
     [Column(TypeName = "decimal(18,2)")]
     public decimal TotalAfterMarkup { get; set; }
 
+    [Column(TypeName = "decimal(8,4)")]
+    public decimal SelectedMinistryOfFinancePercent { get; set; } = 15.0m;
+
     [Column(TypeName = "decimal(18,2)")]
     public decimal MinistryOfFinanceFee { get; set; }
+
+    [Column(TypeName = "decimal(8,4)")]
+    public decimal SelectedWorkersFundPercent { get; set; } = 10.0m;
 
     [Column(TypeName = "decimal(18,2)")]
     public decimal WorkersSyndicateFund { get; set; }
@@ -77,6 +89,9 @@ public class Moqaysa
 
     public bool ApplyOther { get; set; }
 
+    [Column(TypeName = "decimal(8,4)")]
+    public decimal SelectedOtherPercent { get; set; } = 10.0m;
+
     [Column(TypeName = "decimal(18,2)")]
     public decimal OtherAmount { get; set; }
 
@@ -85,11 +100,16 @@ public class Moqaysa
 
     public bool ApplyVat { get; set; }
 
+    [Column(TypeName = "decimal(8,4)")]
+    public decimal SelectedVatPercent { get; set; } = 14.0m;
+
     [Column(TypeName = "decimal(18,2)")]
     public decimal VatAmount { get; set; }
 
     [Column(TypeName = "decimal(18,2)")]
     public decimal FinalGrandTotal { get; set; }
+
+    public bool AreMachineryHoursLinked { get; set; } = true;
 
     // State Tracking
     public bool IsIncludedInTasweya { get; set; } = false;

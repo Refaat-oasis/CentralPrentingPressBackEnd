@@ -4,6 +4,7 @@ public class MoqaysaCalculationResult
 {
     public decimal RawMaterials { get; set; }              // 27. الخامات
     public decimal MaterialProcessingPercent { get; set; }
+    public decimal SelectedMaterialProcessingPercent { get => MaterialProcessingPercent; set => MaterialProcessingPercent = value; }
     public decimal MaterialProcessingFee { get; set; }     // 28. م. تشغيل الخامات (5.5%)
     public decimal FilmsProcessingFee { get; set; }        // م. تشغيل الأفلام (0.00 default)
     public decimal TotalMaterials { get; set; }            // 29. جملة الخامات
@@ -14,6 +15,7 @@ public class MoqaysaCalculationResult
 
     public bool ApplyAdminExpenses { get; set; }           // 31. اختياري
     public decimal AdminExpensesPercent { get; set; }
+    public decimal SelectedAdminExpensesPercent { get => AdminExpensesPercent; set => AdminExpensesPercent = value; }
     public decimal AdminExpenses { get; set; }             // 31. مصروفات إدارية (8.5%)
     public decimal TotalExpenses { get; set; }             // 32. إجمالي المصروفات
 
@@ -23,19 +25,23 @@ public class MoqaysaCalculationResult
     public decimal TotalAfterMarkup { get; set; }          // 34. الجملة
 
     public decimal MinistryOfFinancePercent { get; set; }
+    public decimal SelectedMinistryOfFinancePercent { get => MinistryOfFinancePercent; set => MinistryOfFinancePercent = value; }
     public decimal MinistryOfFinanceFee { get; set; }      // 35. وزارة المالية (15%)
     public decimal WorkersFundPercent { get; set; }
+    public decimal SelectedWorkersFundPercent { get => WorkersFundPercent; set => WorkersFundPercent = value; }
     public string WorkersFundBaseMode { get; set; } = "DiffTotalMinusMaterials";
     public decimal WorkersSyndicateFund { get; set; }      // 36. ص. ت. العاملين (10%)
 
     public decimal SubTotal2 { get; set; }                 // 37. الإجمالي
     public bool ApplyOther { get; set; }                   // 38. اختياري
     public decimal OtherPercent { get; set; }
+    public decimal SelectedOtherPercent { get => OtherPercent; set => OtherPercent = value; }
     public decimal OtherAmount { get; set; }               // 38. أخرى (10%)
     public decimal SubTotal3 { get; set; }                 // 39. إجمالي
 
     public bool ApplyVat { get; set; }                     // 40. اختياري
     public decimal VatPercent { get; set; }
+    public decimal SelectedVatPercent { get => VatPercent; set => VatPercent = value; }
     public decimal VatAmount { get; set; }                 // 40. ض. القيمة المضافة (14%)
     public decimal FinalGrandTotal { get; set; }           // 41. القيمة الإجمالية
 

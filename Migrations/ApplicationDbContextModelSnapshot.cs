@@ -73,6 +73,10 @@ namespace CentralPress.API.Migrations
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("datetime2");
 
+                    b.Property<string>("CurrentSessionId")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
                     b.Property<string>("Email")
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)");
@@ -95,6 +99,9 @@ namespace CentralPress.API.Migrations
 
                     b.Property<int?>("JobTitleId")
                         .HasColumnType("int");
+
+                    b.Property<DateTime?>("LastActivityUtc")
+                        .HasColumnType("datetime2");
 
                     b.Property<bool>("LockoutEnabled")
                         .HasColumnType("bit");
@@ -138,6 +145,9 @@ namespace CentralPress.API.Migrations
 
                     b.Property<string>("SecurityStamp")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("SessionStartedUtc")
+                        .HasColumnType("datetime2");
 
                     b.Property<bool>("TwoFactorEnabled")
                         .HasColumnType("bit");
@@ -453,6 +463,9 @@ namespace CentralPress.API.Migrations
                     b.Property<bool>("ApplyVat")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("AreMachineryHoursLinked")
+                        .HasColumnType("bit");
+
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("datetime2");
 
@@ -506,8 +519,26 @@ namespace CentralPress.API.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
+                    b.Property<decimal>("SelectedAdminExpensesPercent")
+                        .HasColumnType("decimal(8,4)");
+
                     b.Property<decimal>("SelectedMarkupPercent")
                         .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("SelectedMaterialProcessingPercent")
+                        .HasColumnType("decimal(8,4)");
+
+                    b.Property<decimal>("SelectedMinistryOfFinancePercent")
+                        .HasColumnType("decimal(8,4)");
+
+                    b.Property<decimal>("SelectedOtherPercent")
+                        .HasColumnType("decimal(8,4)");
+
+                    b.Property<decimal>("SelectedVatPercent")
+                        .HasColumnType("decimal(8,4)");
+
+                    b.Property<decimal>("SelectedWorkersFundPercent")
+                        .HasColumnType("decimal(8,4)");
 
                     b.Property<string>("SpecificationsText")
                         .IsRequired()
@@ -571,6 +602,9 @@ namespace CentralPress.API.Migrations
                     b.Property<decimal>("MachineHourlyRateSnapshot")
                         .HasPrecision(18, 4)
                         .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal>("MachineHours")
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<int>("MachineryId")
                         .HasColumnType("int");

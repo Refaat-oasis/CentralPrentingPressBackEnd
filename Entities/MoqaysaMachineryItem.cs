@@ -31,6 +31,9 @@ public class MoqaysaMachineryItem
     [Column(TypeName = "decimal(18,2)")]
     public decimal TotalWorkerWages { get; set; }
 
+    [Column(TypeName = "decimal(18,2)")]
+    public decimal MachineHours { get; set; }
+
     [Column(TypeName = "decimal(18,4)")]
     public decimal MachineHourlyRateSnapshot { get; set; }
 

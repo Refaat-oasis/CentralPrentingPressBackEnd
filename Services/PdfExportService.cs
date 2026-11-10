@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -40,6 +41,35 @@ public class PdfExportService
         }
     }
 
+    private static byte[]? _logoBytes;
+    private static byte[]? GetUniversityLogoBytes()
+    {
+        if (_logoBytes != null) return _logoBytes;
+
+        string[] possiblePaths = new[]
+        {
+            Path.Combine(AppContext.BaseDirectory, "assets", "assiut-univ-logo.png"),
+            Path.Combine(Directory.GetCurrentDirectory(), "assets", "assiut-univ-logo.png"),
+            Path.Combine(Directory.GetCurrentDirectory(), "CentralPrentingPressBackEnd", "assets", "assiut-univ-logo.png"),
+            @"C:\Users\Ziad\Desktop\Freelance projects\Prenting System\CentralPrentingPressFrontEnd\src\assets\assiut-univ-logo.png",
+            Path.Combine(Directory.GetCurrentDirectory(), "..", "CentralPrentingPressFrontEnd", "src", "assets", "assiut-univ-logo.png")
+        };
+
+        foreach (var path in possiblePaths)
+        {
+            if (File.Exists(path))
+            {
+                try
+                {
+                    _logoBytes = File.ReadAllBytes(path);
+                    return _logoBytes;
+                }
+                catch { }
+            }
+        }
+        return null;
+    }
+
     public byte[] ExportMoqaysaToPdf(Moqaysa m)
     {
         decimal qty = MoqaysaService.ParseQuantity(m.RequiredQuantityText);
@@ -71,9 +101,14 @@ public class PdfExportService
                 {
                     col.Item().Row(row =>
                     {
-                        // Right: University Title & Customer (matches official reference photo)
+                        // Right: University Logo, Title & Customer (matches official reference photo)
                         row.RelativeItem(2).AlignRight().Column(c =>
                         {
+                            var logo = GetUniversityLogoBytes();
+                            if (logo != null)
+                            {
+                                c.Item().PaddingBottom(2).MaxHeight(36).MaxWidth(36).Image(logo);
+                            }
                             c.Item().Text("جامعة أسيوط").Bold().FontSize(10);
                             c.Item().Text("مطبعة الجامعة المركزية").Bold().FontSize(11);
                             c.Item().Text($"الجهة الطالبة: {m.Customer?.CustomerNameAr ?? "غير محدد"}").FontSize(8.5f);
@@ -120,6 +155,7 @@ public class PdfExportService
                         columns.RelativeColumn(0.9f); // Total Piaster
                         columns.RelativeColumn(1.4f); // Total Pound
 
+
                         // Left side: Materials (6 columns = 6 sub-columns)
                         columns.RelativeColumn(3.6f); // Material Name
                         columns.RelativeColumn(1.1f); // Quantity
@@ -127,6 +163,7 @@ public class PdfExportService
                         columns.RelativeColumn(1.3f); // Unit Price Pound
                         columns.RelativeColumn(0.9f); // Total Piaster
                         columns.RelativeColumn(1.4f); // Total Pound
+
                     });
 
                     // Master Header 1
@@ -181,8 +218,9 @@ public class PdfExportService
                     var mat0 = 0 < materials.Count ? materials[0] : null;
                     RenderMaterialCells(mat0);
 
-                    // Worker Wages Rows (11 rows)
-                    for (int i = 0; i < 11; i++)
+                    // Worker Wages Rows (Dynamic for all machines, minimum 11 to preserve form baseline)
+                    int macCount = Math.Max(11, machineries.Count);
+                    for (int i = 0; i < macCount; i++)
                     {
                         var mac = i < machineries.Count ? machineries[i] : null;
                         var mat = (i + 1) < materials.Count ? materials[i + 1] : null;
@@ -196,7 +234,14 @@ public class PdfExportService
                         table.Cell().Border(0.5f).Padding(1).AlignCenter().Text("-").FontSize(7);
 
                         // Left: Material
-                        RenderMaterialCells(mat);
+                        if (i < 11 && mat != null)
+                        {
+                            RenderMaterialCells(mat);
+                        }
+                        else
+                        {
+                            table.Cell().ColumnSpan(6).Border(0.5f).Text("");
+                        }
                     }
 
                     // Subtotal Worker Wages Row
@@ -217,22 +262,23 @@ public class PdfExportService
                     var mat13 = 13 < materials.Count ? materials[13] : null;
                     RenderMaterialCells(mat13);
 
-                    // Machine Operating Rows (11 rows)
-                    for (int i = 0; i < 11; i++)
+                    // Machine Operating Rows (Dynamic for all machines, minimum 11)
+                    for (int i = 0; i < macCount; i++)
                     {
                         var mac = i < machineries.Count ? machineries[i] : null;
                         var mat = (i + 14) < materials.Count ? materials[i + 14] : null;
 
                         // Right: Machine Operating
+                        decimal mHours = mac != null ? (mac.MachineHours > 0 ? mac.MachineHours : mac.Hours) : 0m;
                         table.Cell().Border(0.5f).Padding(1).AlignRight().Text(mac?.MachineryNameSnapshot ?? "").FontSize(7);
-                        table.Cell().Border(0.5f).Padding(1).AlignCenter().Text(mac != null && mac.Hours > 0 ? mac.Hours.ToString("G") : "").FontSize(7);
+                        table.Cell().Border(0.5f).Padding(1).AlignCenter().Text(mHours > 0 ? mHours.ToString("G") : "").FontSize(7);
                         RenderPoundPiaster(table, mac?.MachineHourlyRateSnapshot ?? 0, showDashIfZero: true);
                         RenderPoundPiaster(table, mac?.TotalMachineOperatingCost ?? 0, showDashIfZero: true);
                         table.Cell().Border(0.5f).Padding(1).AlignCenter().Text("-").FontSize(7);
                         table.Cell().Border(0.5f).Padding(1).AlignCenter().Text("-").FontSize(7);
 
                         // Left: Material
-                        if (i < 10)
+                        if (i < 10 && mat != null)
                         {
                             RenderMaterialCells(mat);
                         }
@@ -255,7 +301,7 @@ public class PdfExportService
                     // Subtotal Machine Costs Row
                     // Right: جملة م . الآلات
                     table.Cell().Border(0.5f).Background(Colors.Grey.Lighten4).Padding(1).AlignRight().Text("جملة م . الآلات").Bold();
-                    table.Cell().Border(0.5f).Background(Colors.Grey.Lighten4).Padding(1).AlignCenter().Text(machineries.Sum(x => x.Hours).ToString("G")).Bold();
+                    table.Cell().Border(0.5f).Background(Colors.Grey.Lighten4).Padding(1).AlignCenter().Text(machineries.Sum(x => x.MachineHours > 0 ? x.MachineHours : x.Hours).ToString("G")).Bold();
                     RenderEmptyCells(table, 4);
                     RenderPoundPiaster(table, m.TotalMachineCosts, isBold: true);
 
@@ -279,7 +325,7 @@ public class PdfExportService
 
                     // Financial Cascade 2: م. تشغيل الخامات
                     // Right: م. تشغيل الخامات
-                    table.Cell().Border(0.5f).Padding(1).AlignRight().Text("م. تشغيل الخامات (5.5%)").Bold();
+                    table.Cell().Border(0.5f).Padding(1).AlignRight().Text("م. تشغيل الخامات").Bold();
                     table.Cell().Border(0.5f).Padding(1).Text("");
                     RenderEmptyCells(table, 2);
                     RenderPoundPiaster(table, m.MaterialProcessingFee);
@@ -314,7 +360,7 @@ public class PdfExportService
                     RenderPoundPiaster(table, m.SubTotal1, isBold: true);
 
                     // Cascade 6: مصروفات إدارية
-                    table.Cell().Border(0.5f).Padding(1).AlignRight().Text($"مصروفات إدارية {(m.ApplyAdminExpenses ? "(8.5%)" : "")}").Bold();
+                    table.Cell().Border(0.5f).Padding(1).AlignRight().Text("مصروفات إدارية").Bold();
                     RenderEmptyCells(table, 3);
                     RenderPoundPiaster(table, m.AdminExpenses, showDashIfZero: !m.ApplyAdminExpenses);
                     RenderEmptyCells(table, 2);
@@ -325,7 +371,7 @@ public class PdfExportService
                     RenderPoundPiaster(table, m.TotalExpenses, isBold: true);
 
                     // Cascade 8: النسبة
-                    table.Cell().Border(0.5f).Padding(1).AlignRight().Text($"النسبة {(m.ApplyMarkup ? $"({m.SelectedMarkupPercent}%)" : "")}").Bold();
+                    table.Cell().Border(0.5f).Padding(1).AlignRight().Text("النسبة").Bold();
                     RenderEmptyCells(table, 3);
                     RenderPoundPiaster(table, m.MarkupAmount, showDashIfZero: !m.ApplyMarkup);
                     RenderEmptyCells(table, 2);
@@ -336,13 +382,13 @@ public class PdfExportService
                     RenderPoundPiaster(table, m.TotalAfterMarkup, isBold: true);
 
                     // Cascade 10: وزارة المالية
-                    table.Cell().Border(0.5f).Padding(1).AlignRight().Text("وزارة المالية (15%)").Bold();
+                    table.Cell().Border(0.5f).Padding(1).AlignRight().Text("وزارة المالية").Bold();
                     RenderEmptyCells(table, 3);
                     RenderPoundPiaster(table, m.MinistryOfFinanceFee);
                     RenderEmptyCells(table, 2);
 
                     // Cascade 11: ص.ت.العاملين
-                    table.Cell().Border(0.5f).Padding(1).AlignRight().Text("ص.ت.العاملين (10%)").Bold();
+                    table.Cell().Border(0.5f).Padding(1).AlignRight().Text("ص.ت.العاملين").Bold();
                     RenderEmptyCells(table, 3);
                     RenderPoundPiaster(table, m.WorkersSyndicateFund);
                     RenderEmptyCells(table, 2);
@@ -353,7 +399,7 @@ public class PdfExportService
                     RenderPoundPiaster(table, m.SubTotal2, isBold: true);
 
                     // Cascade 13: أخرى
-                    table.Cell().Border(0.5f).Padding(1).AlignRight().Text($"أخرى {(m.ApplyOther ? "(10%)" : "")}").Bold();
+                    table.Cell().Border(0.5f).Padding(1).AlignRight().Text("أخرى").Bold();
                     RenderEmptyCells(table, 3);
                     RenderPoundPiaster(table, m.OtherAmount, showDashIfZero: !m.ApplyOther);
                     RenderEmptyCells(table, 2);
@@ -376,6 +422,11 @@ public class PdfExportService
                     table.Cell().Border(0.5f).Background(Colors.Grey.Lighten3).Padding(2).AlignRight().Text("القيمة الإجمالية النهائية").Bold().FontSize(8.5f);
                     RenderEmptyCells(table, 5);
                     RenderPoundPiaster(table, m.FinalGrandTotal, isBold: true);
+
+                    // Cascade 16: سعر الوحدة
+                    table.Cell().Border(0.5f).Background(Colors.Grey.Lighten4).Padding(2).AlignRight().Text("سعر الوحدة").Bold().FontSize(8.5f);
+                    RenderEmptyCells(table, 5);
+                    RenderPoundPiaster(table, finalUnitPrice, isBold: true, showDashIfZero: true);
                 });
 
                 page.Footer().Column(col =>
@@ -457,6 +508,18 @@ public class PdfExportService
         return document.GeneratePdf();
     }
 
+    private static decimal ParseQuantity(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return 0m;
+        var clean = text.Replace(",", "").Replace("،", "").Trim();
+        var match = System.Text.RegularExpressions.Regex.Match(clean, @"\d+(\.\d+)?");
+        if (match.Success && decimal.TryParse(match.Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var qty))
+        {
+            return qty;
+        }
+        return 0m;
+    }
+
     private static void RenderPoundPiaster(TableDescriptor table, decimal amount, bool isBold = false, bool showDashIfZero = false)
     {
         bool isZero = Math.Abs(amount) < 0.001m;
@@ -508,13 +571,31 @@ public class PdfExportService
 
                 page.Header().Column(col =>
                 {
-                    col.Item().AlignCenter().Text("صندوق مطبعة جامعة أسيوط").Bold().FontSize(12);
-                    col.Item().AlignCenter().Text("كشف تسوية").Bold().FontSize(16).Underline();
-                    col.Item().PaddingTop(4).Row(row =>
+                    col.Item().Row(r =>
                     {
-                        row.RelativeItem().AlignRight().Text($"رقم التسوية: {t.SettlementNumber}").Bold();
-                        row.RelativeItem().AlignCenter().Text($"بتاريخ: {t.SettlementDate:yyyy/MM/dd}").Bold();
-                        row.RelativeItem().AlignLeft().Text($"مطالبة رقم: {t.ClaimNumber}").Bold();
+                        r.RelativeItem().AlignRight().Column(c =>
+                        {
+                            var logo = GetUniversityLogoBytes();
+                            if (logo != null)
+                            {
+                                c.Item().PaddingBottom(2).MaxHeight(36).MaxWidth(36).Image(logo);
+                            }
+                            c.Item().Text("جامعة أسيوط").Bold().FontSize(9);
+                            c.Item().Text("مطبعة الجامعة المركزية").Bold().FontSize(9);
+                        });
+
+                        r.RelativeItem(2).AlignCenter().Column(c =>
+                        {
+                            c.Item().Text("صندوق مطبعة جامعة أسيوط").Bold().FontSize(11);
+                            c.Item().Text("كشف تسوية").Bold().FontSize(15).Underline();
+                        });
+
+                        r.RelativeItem().AlignLeft().Column(c =>
+                        {
+                            c.Item().Text($"رقم التسوية: {t.SettlementNumber}").Bold();
+                            c.Item().Text($"بتاريخ: {t.SettlementDate:yyyy/MM/dd}").Bold();
+                            c.Item().Text($"مطالبة رقم: {t.ClaimNumber}").Bold();
+                        });
                     });
                     col.Item().PaddingTop(2).LineHorizontal(0.5f);
                 });
