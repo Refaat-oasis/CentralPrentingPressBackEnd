@@ -1033,8 +1033,7 @@ namespace CentralPress.API.Migrations
                     b.HasIndex("CustomerId");
 
                     b.HasIndex("SettlementNumber")
-                        .IsUnique()
-                        .HasDatabaseName("IX_Tasweyat_SettlementNumber_Unique");
+                        .HasDatabaseName("IX_Tasweyat_SettlementNumber");
 
                     b.ToTable("Tasweyat");
                 });

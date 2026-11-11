@@ -63,25 +63,39 @@ public class TasweyaController : ControllerBase
     [PermissionAuthorize("TASWEYA", "CanCreate")]
     public async Task<IActionResult> Create([FromBody] CreateTasweyaDto dto, CancellationToken ct)
     {
-        var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        var (success, message, result) = await _tasweyaService.CreateAsync(dto, currentUserId, ct);
+        try
+        {
+            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var (success, message, result) = await _tasweyaService.CreateAsync(dto, currentUserId, ct);
 
-        if (!success || result == null)
-            return BadRequest(new { message });
+            if (!success || result == null)
+                return BadRequest(new { message });
 
-        return Ok(result);
+            return Ok(result);
+        }
+        catch (System.Exception ex)
+        {
+            return BadRequest(new { message = $"تعذر إصدار كشف التسوية: {ex.Message}" });
+        }
     }
 
     [HttpPut("{id}")]
     [PermissionAuthorize("TASWEYA", "CanUpdate")]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateTasweyaDto dto, CancellationToken ct)
     {
-        var (success, message, tasweyaId) = await _tasweyaService.UpdateAsync(id, dto, ct);
+        try
+        {
+            var (success, message, tasweyaId) = await _tasweyaService.UpdateAsync(id, dto, ct);
 
-        if (!success)
-            return BadRequest(new { message });
+            if (!success)
+                return BadRequest(new { message });
 
-        return Ok(new { message, tasweyaId });
+            return Ok(new { message, tasweyaId });
+        }
+        catch (System.Exception ex)
+        {
+            return BadRequest(new { message = $"تعذر تحديث كشف التسوية: {ex.Message}" });
+        }
     }
 
     [HttpPatch("{id}/toggle-active")]

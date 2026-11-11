@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using CentralPress.API.Data;
 using CentralPress.API.DTOs;
 using CentralPress.API.Entities;
+using CentralPress.API.Helpers;
 using CentralPress.API.ViewModels;
 using Microsoft.EntityFrameworkCore;
 
@@ -18,17 +19,20 @@ public class TasweyaService : ITasweyaService
     private readonly WordExportService _wordExportService;
     private readonly PdfExportService _pdfExportService;
     private readonly ITafqeetService _tafqeetService;
+    private readonly Microsoft.Extensions.Logging.ILogger<TasweyaService> _logger;
 
     public TasweyaService(
         ApplicationDbContext context,
         WordExportService wordExportService,
         PdfExportService pdfExportService,
-        ITafqeetService tafqeetService)
+        ITafqeetService tafqeetService,
+        Microsoft.Extensions.Logging.ILogger<TasweyaService> logger)
     {
         _context = context;
         _wordExportService = wordExportService;
         _pdfExportService = pdfExportService;
         _tafqeetService = tafqeetService;
+        _logger = logger;
     }
 
     public async Task<List<TasweyaUnsettledMoqaysaViewModel>> GetUnsettledMoqaysatAsync(
@@ -231,6 +235,19 @@ public class TasweyaService : ITasweyaService
         if (string.IsNullOrWhiteSpace(dto.SettlementNumber))
             return (false, "يرجى كتابة رقم كشف التسوية", null);
 
+        // Format settlement number with financial year if entered as bare number (e.g., "55" -> "55 / 2026")
+        var finalSettlementNumber = FinancialYearHelper.FormatSettlementNumber(dto.SettlementNumber, dto.SettlementDate);
+        var fy = FinancialYearHelper.GetFinancialYear(dto.SettlementDate);
+
+        // Uniqueness is enforced within the same financial year (annual cycle restarts May 1st)
+        var existsInFy = await _context.Tasweyat
+            .IgnoreQueryFilters()
+            .AnyAsync(t => t.SettlementNumber == finalSettlementNumber &&
+                           t.SettlementDate >= fy.StartDate &&
+                           t.SettlementDate <= fy.EndDate, ct);
+        if (existsInFy)
+            return (false, $"رقم كشف التسوية '{finalSettlementNumber}' مسجل بالفعل ضمن السنة المالية ({fy.Code}). يرجى استخدام رقم آخر.", null);
+
         if (dto.MoqaysaIds == null || dto.MoqaysaIds.Count == 0)
             return (false, "يرجى تحديد مقايسة واحدة على الأقل لإدراجها في كشف التسوية", null);
 
@@ -270,11 +287,11 @@ public class TasweyaService : ITasweyaService
         {
             var tasweya = new Tasweya
             {
-                SettlementNumber = dto.SettlementNumber.Trim(),
+                SettlementNumber = finalSettlementNumber,
                 SettlementDate = dto.SettlementDate,
                 AccountId = dto.AccountId,
                 CustomerId = dto.CustomerId,
-                ClaimNumber = string.IsNullOrWhiteSpace(dto.ClaimNumber) ? dto.SettlementNumber.Trim() : dto.ClaimNumber.Trim(),
+                ClaimNumber = string.IsNullOrWhiteSpace(dto.ClaimNumber) ? finalSettlementNumber : dto.ClaimNumber.Trim(),
                 JobOrderNumbersText = jobOrders,
 
                 TotalMaterialsSum = totals.TotalMaterialsSum,
@@ -310,21 +327,29 @@ public class TasweyaService : ITasweyaService
             createdTasweya = tasweya;
         };
 
-        if (_context.Database.IsRelational())
+        try
         {
-            var strategy = _context.Database.CreateExecutionStrategy();
-            await strategy.ExecuteAsync(async () =>
+            if (_context.Database.IsRelational())
             {
-                await using var tx = await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
+                var strategy = _context.Database.CreateExecutionStrategy();
+                await strategy.ExecuteAsync(async () =>
+                {
+                    await using var tx = await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
+                    buildTasweya();
+                    await _context.SaveChangesAsync(ct);
+                    await tx.CommitAsync(ct);
+                });
+            }
+            else
+            {
                 buildTasweya();
                 await _context.SaveChangesAsync(ct);
-                await tx.CommitAsync(ct);
-            });
+            }
         }
-        else
+        catch (DbUpdateException ex)
         {
-            buildTasweya();
-            await _context.SaveChangesAsync(ct);
+            _logger.LogError(ex, "Failed to save Tasweya due to database conflict.");
+            return (false, "تعذر حفظ كشف التسوية: قد يكون رقم كشف التسوية مسجلاً مسبقاً أو هناك تعارض في البيانات", null);
         }
 
         if (createdTasweya == null)
@@ -370,6 +395,18 @@ public class TasweyaService : ITasweyaService
         if (string.IsNullOrWhiteSpace(dto.SettlementNumber))
             return (false, "يرجى كتابة رقم كشف التسوية", null);
 
+        var finalSettlementNumber = FinancialYearHelper.FormatSettlementNumber(dto.SettlementNumber, dto.SettlementDate);
+        var fy = FinancialYearHelper.GetFinancialYear(dto.SettlementDate);
+
+        var existsInFy = await _context.Tasweyat
+            .IgnoreQueryFilters()
+            .AnyAsync(t => t.TasweyaId != id &&
+                           t.SettlementNumber == finalSettlementNumber &&
+                           t.SettlementDate >= fy.StartDate &&
+                           t.SettlementDate <= fy.EndDate, ct);
+        if (existsInFy)
+            return (false, $"رقم كشف التسوية '{finalSettlementNumber}' مسجل بالفعل في كشف تسوية آخر ضمن السنة المالية ({fy.Code}). يرجى استخدام رقم آخر.", null);
+
         if (dto.MoqaysaIds == null || dto.MoqaysaIds.Count == 0)
             return (false, "يرجى تحديد مقايسة واحدة على الأقل", null);
 
@@ -414,11 +451,11 @@ public class TasweyaService : ITasweyaService
             }
             _context.TasweyaMoqaysaLinks.RemoveRange(tasweya.MoqaysaLinks);
 
-            tasweya.SettlementNumber = dto.SettlementNumber.Trim();
+            tasweya.SettlementNumber = finalSettlementNumber;
             tasweya.SettlementDate = dto.SettlementDate;
             tasweya.AccountId = dto.AccountId;
             tasweya.CustomerId = dto.CustomerId;
-            tasweya.ClaimNumber = string.IsNullOrWhiteSpace(dto.ClaimNumber) ? dto.SettlementNumber.Trim() : dto.ClaimNumber.Trim();
+            tasweya.ClaimNumber = string.IsNullOrWhiteSpace(dto.ClaimNumber) ? finalSettlementNumber : dto.ClaimNumber.Trim();
             tasweya.JobOrderNumbersText = jobOrders;
 
             tasweya.TotalMaterialsSum = totals.TotalMaterialsSum;
@@ -446,21 +483,29 @@ public class TasweyaService : ITasweyaService
             }
         };
 
-        if (_context.Database.IsRelational())
+        try
         {
-            var strategy = _context.Database.CreateExecutionStrategy();
-            await strategy.ExecuteAsync(async () =>
+            if (_context.Database.IsRelational())
             {
-                await using var tx = await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
+                var strategy = _context.Database.CreateExecutionStrategy();
+                await strategy.ExecuteAsync(async () =>
+                {
+                    await using var tx = await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
+                    applyUpdate();
+                    await _context.SaveChangesAsync(ct);
+                    await tx.CommitAsync(ct);
+                });
+            }
+            else
+            {
                 applyUpdate();
                 await _context.SaveChangesAsync(ct);
-                await tx.CommitAsync(ct);
-            });
+            }
         }
-        else
+        catch (DbUpdateException ex)
         {
-            applyUpdate();
-            await _context.SaveChangesAsync(ct);
+            _logger.LogError(ex, "Failed to update Tasweya due to database conflict.");
+            return (false, "تعذر تحديث كشف التسوية: قد يكون رقم كشف التسوية مسجلاً مسبقاً أو هناك تعارض في البيانات", null);
         }
 
         return (true, "تم تعديل كشف التسوية وحفظ التحديثات بنجاح", tasweya.TasweyaId);

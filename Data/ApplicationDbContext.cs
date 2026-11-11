@@ -124,8 +124,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
 
         builder.Entity<Tasweya>()
             .HasIndex(t => t.SettlementNumber)
-            .IsUnique()
-            .HasDatabaseName("IX_Tasweyat_SettlementNumber_Unique");
+            .HasDatabaseName("IX_Tasweyat_SettlementNumber");
 
         builder.Entity<TasweyaMoqaysaLink>()
             .HasIndex(l => new { l.TasweyaId, l.MoqaysaId })

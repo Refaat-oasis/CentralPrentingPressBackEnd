@@ -154,7 +154,9 @@ public class MoqaysaService : IMoqaysaService
     {
         ArgumentNullException.ThrowIfNull(dto);
         if (string.IsNullOrWhiteSpace(dto.JobOrderNumber))
-            throw new ArgumentException("يرجى كتابة رقم إذن التشغيل", nameof(dto.JobOrderNumber));
+        {
+            dto.JobOrderNumber = $"{DateTime.UtcNow:yyyyMMdd}-{Random.Shared.Next(100, 999)}";
+        }
 
         var customer = await _context.Customers.FindAsync(new object[] { dto.CustomerId }, ct);
         if (customer == null)
@@ -262,7 +264,10 @@ public class MoqaysaService : IMoqaysaService
 
         var calc = await PerformCalculationInternalAsync(dto, ct);
 
-        moqaysa.JobOrderNumber = dto.JobOrderNumber.Trim();
+        if (!string.IsNullOrWhiteSpace(dto.JobOrderNumber))
+        {
+            moqaysa.JobOrderNumber = dto.JobOrderNumber.Trim();
+        }
         moqaysa.CustomerId = dto.CustomerId;
         moqaysa.RequiredQuantityText = dto.RequiredQuantityText?.Trim() ?? "";
         moqaysa.SpecificationsText = dto.SpecificationsText?.Trim() ?? "";

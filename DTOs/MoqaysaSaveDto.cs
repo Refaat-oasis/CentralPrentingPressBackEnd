@@ -5,7 +5,6 @@ namespace CentralPress.API.DTOs;
 
 public class MoqaysaSaveDto
 {
-    [Required(ErrorMessage = "يرجى إدخال رقم إذن التشغيل")]
     [MaxLength(100, ErrorMessage = "رقم إذن التشغيل يجب ألا يتجاوز 100 حرف")]
     public string JobOrderNumber { get; set; } = string.Empty;
 
