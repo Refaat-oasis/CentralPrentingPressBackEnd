@@ -23,12 +23,19 @@ public class TasweyaUnsettledMoqaysaViewModel
     public decimal MarkupAmount { get; set; }
     public bool ApplyMarkup { get; set; }
     public decimal SelectedMarkupPercent { get; set; }
+    public decimal SelectedMinistryOfFinancePercent { get; set; }
+    public decimal SelectedWorkersFundPercent { get; set; }
+    public decimal SelectedOtherPercent { get; set; }
+    public decimal SelectedVatPercent { get; set; }
     public decimal MinistryOfFinanceFee { get; set; }
     public decimal WorkersSyndicateFund { get; set; }
+    public bool ApplyOther { get; set; }
     public decimal OtherAmount { get; set; }
     public bool ApplyVat { get; set; }
     public decimal VatAmount { get; set; }
     public decimal FinalGrandTotal { get; set; }
+    public bool IsIncludedInTasweya { get; set; }
+    public bool IsPartiallyIncludedInTasweya { get; set; }
     public DateTime CreatedAtUtc { get; set; }
     public List<MoqaysaAccountShareViewModel> AccountShares { get; set; } = new();
 }

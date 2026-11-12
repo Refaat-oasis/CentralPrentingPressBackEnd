@@ -602,8 +602,17 @@ namespace CentralPress.API.Migrations
                     b.Property<decimal>("AllocatedAmount")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<bool>("IsIncludedInTasweya")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsPaid")
+                        .HasColumnType("bit");
+
                     b.Property<int>("MoqaysaId")
                         .HasColumnType("int");
+
+                    b.Property<DateTime?>("PaidAtUtc")
+                        .HasColumnType("datetime2");
 
                     b.Property<decimal>("SharePercentage")
                         .HasColumnType("decimal(5,2)");

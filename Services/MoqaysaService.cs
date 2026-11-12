@@ -115,20 +115,50 @@ public class MoqaysaService : IMoqaysaService
             .OrderByDescending(m => m.MoqaysaId)
             .ToListAsync(ct);
 
+        var moqaysaIds = list.Select(m => m.MoqaysaId).ToList();
+        var activeLinks = await _context.TasweyaMoqaysaLinks
+            .AsNoTracking()
+            .Where(l => moqaysaIds.Contains(l.MoqaysaId) && l.Tasweya != null && l.Tasweya.IsActive)
+            .Select(l => new
+            {
+                l.MoqaysaId,
+                l.Tasweya!.AccountId,
+                l.TasweyaId,
+                l.Tasweya.SettlementNumber
+            })
+            .ToListAsync(ct);
+
+        var linkLookup = activeLinks
+            .GroupBy(x => (x.MoqaysaId, x.AccountId))
+            .ToDictionary(g => g.Key, g => g.First());
+
         return list.Select(m =>
         {
-            var shareVms = m.AccountShares.Select(s => new MoqaysaAccountShareViewModel
+            var shareVms = m.AccountShares.Select(s =>
             {
-                AccountId = s.AccountId,
-                AccountNameAr = s.Account?.AccountNameAr ?? string.Empty,
-                DebitHeaderTextAr = s.Account?.DebitHeaderTextAr ?? string.Empty,
-                SharePercentage = s.SharePercentage,
-                AllocatedAmount = s.AllocatedAmount
+                linkLookup.TryGetValue((m.MoqaysaId, s.AccountId), out var activeLink);
+                return new MoqaysaAccountShareViewModel
+                {
+                    ShareId = s.ShareId,
+                    AccountId = s.AccountId,
+                    AccountNameAr = s.Account?.AccountNameAr ?? string.Empty,
+                    DebitHeaderTextAr = s.Account?.DebitHeaderTextAr ?? string.Empty,
+                    SharePercentage = s.SharePercentage,
+                    AllocatedAmount = s.AllocatedAmount,
+                    IsIncludedInTasweya = s.IsIncludedInTasweya,
+                    IsPaid = s.IsPaid,
+                    PaidAtUtc = s.PaidAtUtc,
+                    TasweyaId = activeLink?.TasweyaId,
+                    SettlementNumber = activeLink?.SettlementNumber
+                };
             }).ToList();
 
             string summaryText = shareVms.Count > 0
                 ? string.Join(" ، ", shareVms.Select(s => $"{s.AccountNameAr} ({s.SharePercentage}%)"))
                 : string.Empty;
+
+            bool isPartialTasweya = shareVms.Any(s => s.IsIncludedInTasweya) && !m.IsIncludedInTasweya;
+            bool isPartialPaid = shareVms.Any(s => s.IsPaid) && !m.IsPaid;
 
             return new MoqaysaSummaryViewModel
             {
@@ -143,13 +173,28 @@ public class MoqaysaService : IMoqaysaService
                 TotalWorkerWages = m.TotalWorkerWages,
                 TotalMachineCosts = m.TotalMachineCosts,
                 SubTotal1 = m.SubTotal1,
+                AdminExpenses = m.AdminExpenses,
+                MarkupAmount = m.MarkupAmount,
+                MinistryOfFinanceFee = m.MinistryOfFinanceFee,
+                WorkersSyndicateFund = m.WorkersSyndicateFund,
                 SubTotal2 = m.SubTotal2,
+                ApplyOther = m.ApplyOther,
+                OtherAmount = m.OtherAmount,
                 SubTotal3 = m.SubTotal3,
                 FinalGrandTotal = m.FinalGrandTotal,
+                SelectedMaterialProcessingPercent = m.SelectedMaterialProcessingPercent,
+                SelectedAdminExpensesPercent = m.SelectedAdminExpensesPercent,
+                SelectedMarkupPercent = m.SelectedMarkupPercent,
+                SelectedMinistryOfFinancePercent = m.SelectedMinistryOfFinancePercent,
+                SelectedWorkersFundPercent = m.SelectedWorkersFundPercent,
+                SelectedOtherPercent = m.SelectedOtherPercent,
+                SelectedVatPercent = m.SelectedVatPercent,
                 ApplyVat = m.ApplyVat,
                 VatAmount = m.VatAmount,
                 IsIncludedInTasweya = m.IsIncludedInTasweya,
+                IsPartiallyIncludedInTasweya = isPartialTasweya,
                 IsPaid = m.IsPaid,
+                IsPartiallyPaid = isPartialPaid,
                 IsActive = m.IsActive,
                 CreatedAtUtc = m.CreatedAtUtc,
                 AccountShares = shareVms,
@@ -325,8 +370,8 @@ public class MoqaysaService : IMoqaysaService
 
         if (moqaysa == null) return null;
 
-        if (moqaysa.IsIncludedInTasweya)
-            throw new InvalidOperationException("لا يمكن تعديل المقايسة لأنها مُدرجة بالفعل في كشف تسوية / مطالبة رسمية");
+        if (moqaysa.IsIncludedInTasweya || moqaysa.AccountShares.Any(s => s.IsIncludedInTasweya))
+            throw new InvalidOperationException("لا يمكن تعديل المقايسة لأنها مُدرجة بالفعل (أو إحدى حصصها المالية مُدرجة) في كشف تسوية / مطالبة رسمية");
 
         // Validate machinery maintenance status (MED-11)
         await ValidateMachineriesOperationalAsync(dto.MachineryItems, ct);
@@ -652,11 +697,15 @@ public class MoqaysaService : IMoqaysaService
             }).ToList(),
             AccountShares = m.AccountShares.Select(s => new MoqaysaAccountShareViewModel
             {
+                ShareId = s.ShareId,
                 AccountId = s.AccountId,
                 AccountNameAr = s.Account?.AccountNameAr ?? string.Empty,
                 DebitHeaderTextAr = s.Account?.DebitHeaderTextAr ?? string.Empty,
                 SharePercentage = s.SharePercentage,
-                AllocatedAmount = s.AllocatedAmount
+                AllocatedAmount = s.AllocatedAmount,
+                IsIncludedInTasweya = s.IsIncludedInTasweya,
+                IsPaid = s.IsPaid,
+                PaidAtUtc = s.PaidAtUtc
             }).ToList()
         };
     }

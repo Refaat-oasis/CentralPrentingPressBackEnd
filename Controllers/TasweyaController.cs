@@ -79,6 +79,26 @@ public class TasweyaController : ControllerBase
         }
     }
 
+    [HttpPost("multi-account")]
+    [PermissionAuthorize("TASWEYA", "CanCreate")]
+    public async Task<IActionResult> CreateMultiAccount([FromBody] CreateMultiAccountTasweyaDto dto, CancellationToken ct)
+    {
+        try
+        {
+            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var (success, message, result) = await _tasweyaService.CreateMultiAccountAsync(dto, currentUserId, ct);
+
+            if (!success || result == null)
+                return BadRequest(new { message });
+
+            return Ok(result);
+        }
+        catch (System.Exception ex)
+        {
+            return BadRequest(new { message = $"تعذر إصدار كشوف التسوية المتعددة: {ex.Message}" });
+        }
+    }
+
     [HttpPut("{id}")]
     [PermissionAuthorize("TASWEYA", "CanUpdate")]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateTasweyaDto dto, CancellationToken ct)

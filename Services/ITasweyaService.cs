@@ -28,6 +28,11 @@ public interface ITasweyaService
         string? userId,
         CancellationToken ct = default);
 
+    Task<(bool Success, string Message, BatchTasweyaCreateResultViewModel? Result)> CreateMultiAccountAsync(
+        CreateMultiAccountTasweyaDto dto,
+        string? userId,
+        CancellationToken ct = default);
+
     Task<(bool Success, string Message, int? TasweyaId)> UpdateAsync(
         int id,
         UpdateTasweyaDto dto,

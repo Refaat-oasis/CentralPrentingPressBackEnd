@@ -269,6 +269,7 @@ public class PaymentOrderService : IPaymentOrderService
         var tasweyat = await _context.Tasweyat
             .Include(t => t.MoqaysaLinks)
                 .ThenInclude(ml => ml.Moqaysa)
+                    .ThenInclude(m => m!.AccountShares)
             .Where(t => dto.TasweyaIds.Contains(t.TasweyaId) && t.IsActive)
             .ToListAsync(ct);
 
@@ -349,8 +350,7 @@ public class PaymentOrderService : IPaymentOrderService
                 {
                     if (ml.Moqaysa != null)
                     {
-                        ml.Moqaysa.IsPaid = true;
-                        ml.Moqaysa.PaidAtUtc = now;
+                        UpdateMoqaysaSharePaymentState(ml.Moqaysa, t.AccountId, isPaid: true, now);
                     }
                 }
             }
@@ -580,6 +580,7 @@ public class PaymentOrderService : IPaymentOrderService
                 .ThenInclude(l => l.Tasweya)
                     .ThenInclude(t => t!.MoqaysaLinks)
                         .ThenInclude(ml => ml.Moqaysa)
+                            .ThenInclude(m => m!.AccountShares)
             .FirstOrDefaultAsync(p => p.PaymentOrderId == id, ct);
 
         if (paymentOrder == null) return Failure("أمر الدفع غير موجود");
@@ -627,8 +628,7 @@ public class PaymentOrderService : IPaymentOrderService
                     {
                         if (ml.Moqaysa != null)
                         {
-                            ml.Moqaysa.IsPaid = true;
-                            ml.Moqaysa.PaidAtUtc = now;
+                            UpdateMoqaysaSharePaymentState(ml.Moqaysa, link.Tasweya.AccountId, isPaid: true, now);
                         }
                     }
                 }
@@ -762,6 +762,7 @@ public class PaymentOrderService : IPaymentOrderService
                 .ThenInclude(l => l.Tasweya)
                     .ThenInclude(t => t!.MoqaysaLinks)
                         .ThenInclude(ml => ml.Moqaysa)
+                            .ThenInclude(m => m!.AccountShares)
             .FirstOrDefaultAsync(p => p.PaymentOrderId == id, ct);
 
         if (paymentOrder == null) return Failure("أمر الدفع غير موجود");
@@ -796,8 +797,7 @@ public class PaymentOrderService : IPaymentOrderService
                         {
                             if (ml.Moqaysa != null)
                             {
-                                ml.Moqaysa.IsPaid = false;
-                                ml.Moqaysa.PaidAtUtc = null;
+                                UpdateMoqaysaSharePaymentState(ml.Moqaysa, link.Tasweya.AccountId, isPaid: false, timestampUtc: null);
                             }
                         }
                     }
@@ -854,6 +854,7 @@ public class PaymentOrderService : IPaymentOrderService
                 .ThenInclude(l => l.Tasweya)
                     .ThenInclude(t => t!.MoqaysaLinks)
                         .ThenInclude(ml => ml.Moqaysa)
+                            .ThenInclude(m => m!.AccountShares)
             .FirstOrDefaultAsync(p => p.PaymentOrderId == id, ct);
 
         if (item == null)
@@ -1180,6 +1181,27 @@ public class PaymentOrderService : IPaymentOrderService
         PaymentOrderStatus.Cancelled => "ملغي",
         _ => "غير محدد"
     };
+
+    private static void UpdateMoqaysaSharePaymentState(
+        Moqaysa moqaysa,
+        int accountId,
+        bool isPaid,
+        DateTime? timestampUtc)
+    {
+        var share = moqaysa.AccountShares.FirstOrDefault(s => s.AccountId == accountId);
+        if (share != null)
+        {
+            share.IsPaid = isPaid;
+            share.PaidAtUtc = isPaid ? timestampUtc : null;
+        }
+
+        bool allSharesPaid = moqaysa.AccountShares.Count > 0
+            ? moqaysa.AccountShares.All(s => s.IsPaid)
+            : isPaid;
+
+        moqaysa.IsPaid = allSharesPaid;
+        moqaysa.PaidAtUtc = allSharesPaid ? (moqaysa.PaidAtUtc ?? timestampUtc) : null;
+    }
 
     private static PaymentOrderOperationResultViewModel Failure(string message) => new()
     {
