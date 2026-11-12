@@ -33,6 +33,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<PaymentOrder> PaymentOrders => Set<PaymentOrder>();
     public DbSet<PaymentOrderTasweyaLink> PaymentOrderTasweyaLinks => Set<PaymentOrderTasweyaLink>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<MoqaysaAccountShare> MoqaysaAccountShares { get; set; }
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -276,5 +277,13 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
         builder.Entity<PaymentOrderTasweyaLink>().HasQueryFilter(l => l.PaymentOrder!.IsActive && l.Tasweya!.IsActive);
         builder.Entity<RolePermission>().HasQueryFilter(p => p.JobTitle!.IsActive && p.Module!.IsActive);
         builder.Entity<UserPermissionOverride>().HasQueryFilter(o => o.Module!.IsActive);
+
+        // 10. MoqaysaAccountShare configuration
+        builder.Entity<MoqaysaAccountShare>(entity =>
+        {
+            entity.HasOne(s => s.Moqaysa).WithMany(m => m.AccountShares).HasForeignKey(s => s.MoqaysaId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(s => s.Account).WithMany().HasForeignKey(s => s.AccountId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(s => new { s.MoqaysaId, s.AccountId }).IsUnique();
+        });
     }
 }

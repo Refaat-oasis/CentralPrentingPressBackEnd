@@ -66,7 +66,7 @@ public class TasweyaService : ITasweyaService
             query = query.Where(m => m.CustomerId == customerId.Value);
 
         if (accountId.HasValue)
-            query = query.Where(m => m.Customer != null && m.Customer.AccountId == accountId.Value);
+            query = query.Where(m => (m.AccountShares.Any(s => s.AccountId == accountId.Value)) || (m.Customer != null && m.Customer.AccountId == accountId.Value));
 
         return await query
             .OrderByDescending(m => m.MoqaysaId)
@@ -95,7 +95,15 @@ public class TasweyaService : ITasweyaService
                 ApplyVat = m.ApplyVat,
                 VatAmount = m.VatAmount,
                 FinalGrandTotal = m.FinalGrandTotal,
-                CreatedAtUtc = m.CreatedAtUtc
+                CreatedAtUtc = m.CreatedAtUtc,
+                AccountShares = m.AccountShares.Select(s => new MoqaysaAccountShareViewModel
+                {
+                    AccountId = s.AccountId,
+                    AccountNameAr = s.Account != null ? s.Account.AccountNameAr : string.Empty,
+                    DebitHeaderTextAr = s.Account != null ? s.Account.DebitHeaderTextAr : string.Empty,
+                    SharePercentage = s.SharePercentage,
+                    AllocatedAmount = s.AllocatedAmount
+                }).ToList()
             })
             .ToListAsync(ct);
     }
@@ -108,6 +116,7 @@ public class TasweyaService : ITasweyaService
         CancellationToken ct = default)
     {
         var query = _context.Tasweyat
+            .IgnoreQueryFilters()
             .AsNoTracking()
             .Include(t => t.Account)
             .Include(t => t.Customer)

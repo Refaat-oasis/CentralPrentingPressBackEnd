@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace CentralPress.API.ViewModels;
 
@@ -24,4 +25,6 @@ public class MoqaysaSummaryViewModel
     public bool IsPaid { get; set; }
     public bool IsActive { get; set; }
     public DateTime CreatedAtUtc { get; set; }
+    public List<MoqaysaAccountShareViewModel> AccountShares { get; set; } = new();
+    public string PayingAccountsSummaryText { get; set; } = string.Empty;
 }

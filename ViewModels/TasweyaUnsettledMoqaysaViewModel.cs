@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace CentralPress.API.ViewModels;
 
@@ -29,4 +30,5 @@ public class TasweyaUnsettledMoqaysaViewModel
     public decimal VatAmount { get; set; }
     public decimal FinalGrandTotal { get; set; }
     public DateTime CreatedAtUtc { get; set; }
+    public List<MoqaysaAccountShareViewModel> AccountShares { get; set; } = new();
 }

@@ -66,4 +66,5 @@ public class MoqaysaDetailViewModel
 
     public List<MoqaysaMaterialItemViewModel> MaterialItems { get; set; } = new();
     public List<MoqaysaMachineryItemViewModel> MachineryItems { get; set; } = new();
+    public List<MoqaysaAccountShareViewModel> AccountShares { get; set; } = new();
 }

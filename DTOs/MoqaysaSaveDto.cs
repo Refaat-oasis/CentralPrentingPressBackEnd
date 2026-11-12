@@ -54,4 +54,6 @@ public class MoqaysaSaveDto
     public List<MaterialItemInputDto> MaterialItems { get; set; } = new();
 
     public List<MachineryItemInputDto> MachineryItems { get; set; } = new();
+
+    public List<MoqaysaAccountShareDto>? AccountShares { get; set; }
 }
