@@ -5,6 +5,7 @@ using CentralPress.API.Services;
 using CentralPress.API.ViewModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace CentralPress.API.Controllers;
 
@@ -20,6 +21,7 @@ public class SuperAdminController : ControllerBase
     }
 
     [HttpPost("login")]
+    [EnableRateLimiting("AuthRateLimit")]
     public async Task<IActionResult> Login([FromBody] SuperAdminLoginDto dto, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(dto.Code))

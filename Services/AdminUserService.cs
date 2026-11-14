@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using CentralPress.API.Data;
@@ -10,6 +11,7 @@ using CentralPress.API.ViewModels;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Logging;
 
 namespace CentralPress.API.Services;
 
@@ -19,17 +21,20 @@ public class AdminUserService : IAdminUserService
     private readonly ApplicationDbContext _context;
     private readonly IEmailService _emailService;
     private readonly ITokenService _tokenService;
+    private readonly ILogger<AdminUserService> _logger;
 
     public AdminUserService(
         UserManager<ApplicationUser> userManager,
         ApplicationDbContext context,
         IEmailService emailService,
-        ITokenService tokenService)
+        ITokenService tokenService,
+        ILogger<AdminUserService> logger)
     {
         _userManager = userManager;
         _context = context;
         _emailService = emailService;
         _tokenService = tokenService;
+        _logger = logger;
     }
 
     public async Task<List<EmployeeSummaryViewModel>> GetAllEmployeesAsync(CancellationToken cancellationToken = default)
@@ -102,7 +107,7 @@ public class AdminUserService : IAdminUserService
 
         string passwordToSet = !string.IsNullOrWhiteSpace(dto.DummyPassword)
             ? dto.DummyPassword.Trim()
-            : "User@" + DateTime.UtcNow.Year;
+            : GenerateSecureTemporaryPassword();
 
         var result = await _userManager.CreateAsync(user, passwordToSet);
         if (!result.Succeeded)
@@ -113,8 +118,19 @@ public class AdminUserService : IAdminUserService
         // Assign default Employee role if no role assigned
         await _userManager.AddToRoleAsync(user, "Employee");
 
-        // Send invitation email in background
-        _ = _emailService.SendNewUserInvitationCodeAsync(user.Email, user.FullName, user.EmployeeCode, passwordToSet);
+        // Send invitation email cleanly and log failures without exposing secrets
+        try
+        {
+            var (sent, err) = await _emailService.SendNewUserInvitationCodeAsync(user.Email, user.FullName, user.EmployeeCode, passwordToSet);
+            if (!sent)
+            {
+                _logger.LogWarning("Invitation email dispatch failed for {Email}: {Error}", user.Email, err);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected exception sending invitation email for {Email}", user.Email);
+        }
 
         var jobTitle = user.JobTitleId.HasValue ? await _context.JobTitles.FindAsync([user.JobTitleId.Value], cancellationToken) : null;
 
@@ -263,7 +279,8 @@ public class AdminUserService : IAdminUserService
             {
                 await transaction.RollbackAsync(cancellationToken);
             }
-            return (false, $"حدث خطأ أثناء حفظ الصلاحيات الاستثنائية: {ex.Message}");
+            _logger.LogError(ex, "Error saving user permission overrides for {UserId}", userId);
+            return (false, "حدث خطأ غير متوقع أثناء حفظ الصلاحيات الاستثنائية.");
         }
     }
 
@@ -322,7 +339,35 @@ public class AdminUserService : IAdminUserService
             {
                 await transaction.RollbackAsync(cancellationToken);
             }
-            return (false, $"حدث خطأ أثناء حذف الموظف: {ex.Message}");
+            _logger.LogError(ex, "Error deleting employee {UserId}", id);
+            return (false, "حدث خطأ غير متوقع أثناء حذف الموظف.");
         }
+    }
+
+    private static string GenerateSecureTemporaryPassword()
+    {
+        const string upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+        const string lower = "abcdefghijkmnopqrstuvwxyz";
+        const string digits = "23456789";
+        const string all = upper + lower + digits + "!@#$%";
+
+        var chars = new char[12];
+        chars[0] = upper[RandomNumberGenerator.GetInt32(upper.Length)];
+        chars[1] = lower[RandomNumberGenerator.GetInt32(lower.Length)];
+        chars[2] = digits[RandomNumberGenerator.GetInt32(digits.Length)];
+        chars[3] = '!';
+        for (int i = 4; i < chars.Length; i++)
+        {
+            chars[i] = all[RandomNumberGenerator.GetInt32(all.Length)];
+        }
+
+        // Fisher-Yates shuffle
+        for (int i = chars.Length - 1; i > 0; i--)
+        {
+            int j = RandomNumberGenerator.GetInt32(i + 1);
+            (chars[i], chars[j]) = (chars[j], chars[i]);
+        }
+
+        return new string(chars);
     }
 }

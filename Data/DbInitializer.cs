@@ -6,6 +6,9 @@ using System.Threading.Tasks;
 using CentralPress.API.Entities;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
 namespace CentralPress.API.Data;
 
@@ -14,7 +17,10 @@ public static class DbInitializer
     public static async Task InitializeAsync(
         ApplicationDbContext context,
         UserManager<ApplicationUser> userManager,
-        RoleManager<IdentityRole> roleManager)
+        RoleManager<IdentityRole> roleManager,
+        IConfiguration? configuration = null,
+        IHostEnvironment? environment = null,
+        ILogger? logger = null)
     {
         // HIGH-25: Use MigrateAsync for relational database, EnsureCreatedAsync for in-memory test databases
         if (context.Database.IsRelational())
@@ -276,31 +282,43 @@ public static class DbInitializer
             }
         }
 
-        // 7. Seed Admin User (CRIT-02: Zero Auto-Reset Backdoor!)
+        // 7. Seed Admin User (CRIT-02: Zero Auto-Reset Backdoor & No Hardcoded Production Default!)
         var adminEmail = "admin@aup.edu.eg";
         var existingAdmin = await userManager.FindByEmailAsync(adminEmail);
         if (existingAdmin == null)
         {
-            var adminUser = new ApplicationUser
-            {
-                UserName = adminEmail,
-                Email = adminEmail,
-                EmailConfirmed = true,
-                FullName = "مدير النظام المركزي",
-                EmployeeCode = "EMP001",
-                JobTitleId = adminRole.JobTitleId,
-                MustChangePassword = false,
-                IsActive = true,
-                CreatedAtUtc = DateTime.UtcNow
-            };
+            var configuredSeedPassword = configuration?["Seed:AdminInitialPassword"];
+            string? initialPassword = !string.IsNullOrWhiteSpace(configuredSeedPassword)
+                ? configuredSeedPassword.Trim()
+                : (environment == null || environment.IsDevelopment() ? "Admin@12345" : null);
 
-            var createResult = await userManager.CreateAsync(adminUser, "Admin@12345");
-            if (!createResult.Succeeded)
+            if (string.IsNullOrWhiteSpace(initialPassword))
             {
-                throw new Exception($"Failed to create admin user: {string.Join(", ", createResult.Errors.Select(e => e.Description))}");
+                logger?.LogWarning("Seed:AdminInitialPassword is not set in Production; skipping default admin account seeding.");
             }
+            else
+            {
+                var adminUser = new ApplicationUser
+                {
+                    UserName = adminEmail,
+                    Email = adminEmail,
+                    EmailConfirmed = true,
+                    FullName = "مدير النظام المركزي",
+                    EmployeeCode = "EMP001",
+                    JobTitleId = adminRole.JobTitleId,
+                    MustChangePassword = true,
+                    IsActive = true,
+                    CreatedAtUtc = DateTime.UtcNow
+                };
 
-            await userManager.AddToRoleAsync(adminUser, "Admin");
+                var createResult = await userManager.CreateAsync(adminUser, initialPassword);
+                if (!createResult.Succeeded)
+                {
+                    throw new Exception($"Failed to create admin user: {string.Join(", ", createResult.Errors.Select(e => e.Description))}");
+                }
+
+                await userManager.AddToRoleAsync(adminUser, "Admin");
+            }
         }
         else
         {

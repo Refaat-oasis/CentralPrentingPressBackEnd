@@ -8,6 +8,7 @@ using CentralPress.API.Services;
 using CentralPress.API.ViewModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 
 namespace CentralPress.API.Controllers;
 
@@ -17,10 +18,12 @@ namespace CentralPress.API.Controllers;
 public class TasweyaController : ControllerBase
 {
     private readonly ITasweyaService _tasweyaService;
+    private readonly ILogger<TasweyaController> _logger;
 
-    public TasweyaController(ITasweyaService tasweyaService)
+    public TasweyaController(ITasweyaService tasweyaService, ILogger<TasweyaController> logger)
     {
         _tasweyaService = tasweyaService;
+        _logger = logger;
     }
 
     [HttpGet("unsettled-moqaysat")]
@@ -75,7 +78,8 @@ public class TasweyaController : ControllerBase
         }
         catch (System.Exception ex)
         {
-            return BadRequest(new { message = $"تعذر إصدار كشف التسوية: {ex.Message}" });
+            _logger.LogError(ex, "Error creating Tasweya");
+            return StatusCode(500, new { message = "حدث خطأ غير متوقع أثناء إصدار كشف التسوية." });
         }
     }
 
@@ -95,7 +99,8 @@ public class TasweyaController : ControllerBase
         }
         catch (System.Exception ex)
         {
-            return BadRequest(new { message = $"تعذر إصدار كشوف التسوية المتعددة: {ex.Message}" });
+            _logger.LogError(ex, "Error creating multi-account Tasweya");
+            return StatusCode(500, new { message = "حدث خطأ غير متوقع أثناء إصدار كشوف التسوية المتعددة." });
         }
     }
 
@@ -114,7 +119,8 @@ public class TasweyaController : ControllerBase
         }
         catch (System.Exception ex)
         {
-            return BadRequest(new { message = $"تعذر تحديث كشف التسوية: {ex.Message}" });
+            _logger.LogError(ex, "Error updating Tasweya {Id}", id);
+            return StatusCode(500, new { message = "حدث خطأ غير متوقع أثناء تحديث كشف التسوية." });
         }
     }
 

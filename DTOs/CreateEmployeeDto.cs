@@ -21,5 +21,6 @@ public class CreateEmployeeDto
     public int? JobTitleId { get; init; }
 
     [MaxLength(500)]
+    [RegularExpression(@"^(https://.*|/.*)$", ErrorMessage = "رابط الصورة غير صالح")]
     public string? PhotoUrl { get; init; }
 }

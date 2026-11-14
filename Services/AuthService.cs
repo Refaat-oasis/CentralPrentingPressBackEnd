@@ -11,6 +11,8 @@ using CentralPress.API.Entities;
 using CentralPress.API.ViewModels;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 
 namespace CentralPress.API.Services;
 
@@ -21,19 +23,25 @@ public class AuthService : IAuthService
     private readonly ITokenService _tokenService;
     private readonly IEmailService _emailService;
     private readonly PermissionService _permissionService;
+    private readonly IConfiguration _configuration;
+    private readonly ILogger<AuthService> _logger;
 
     public AuthService(
         UserManager<ApplicationUser> userManager,
         ApplicationDbContext context,
         ITokenService tokenService,
         IEmailService emailService,
-        PermissionService permissionService)
+        PermissionService permissionService,
+        IConfiguration configuration,
+        ILogger<AuthService> logger)
     {
         _userManager = userManager;
         _context = context;
         _tokenService = tokenService;
         _emailService = emailService;
         _permissionService = permissionService;
+        _configuration = configuration;
+        _logger = logger;
     }
 
     public async Task<LoginResponseViewModel?> LoginAsync(LoginDto dto, string? ipAddress, CancellationToken cancellationToken = default)
@@ -41,17 +49,32 @@ public class AuthService : IAuthService
         if (string.IsNullOrWhiteSpace(dto.Identifier) || string.IsNullOrWhiteSpace(dto.Password))
             return null;
 
-        var user = await _userManager.FindByEmailAsync(dto.Identifier)
+        var identifier = dto.Identifier.Trim();
+        var user = await _userManager.FindByEmailAsync(identifier)
                    ?? await _context.Users
                        .Include(u => u.JobTitle)
-                       .FirstOrDefaultAsync(u => u.EmployeeCode == dto.Identifier, cancellationToken);
+                       .FirstOrDefaultAsync(u => u.EmployeeCode == identifier, cancellationToken);
 
         if (user == null || !user.IsActive)
             return null;
 
+        if (await _userManager.IsLockedOutAsync(user))
+        {
+            _logger.LogWarning("Blocked login attempt for locked out user {EmployeeCode} from {Ip}", user.EmployeeCode, ipAddress);
+            return null;
+        }
+
         bool passwordValid = await _userManager.CheckPasswordAsync(user, dto.Password);
         if (!passwordValid)
+        {
+            await _userManager.AccessFailedAsync(user);
             return null;
+        }
+
+        if (user.AccessFailedCount > 0)
+        {
+            await _userManager.ResetAccessFailedCountAsync(user);
+        }
 
         var tokens = await _tokenService.GenerateTokensAsync(user, isSuperAdmin: false, ipAddress);
         var permissions = await _permissionService.GetUserPermissionsAsync(user.Id);
@@ -149,11 +172,12 @@ public class AuthService : IAuthService
 
     public async Task<(bool Succeeded, string Message, bool EmailSent, string? EmailError)> ForgotPasswordAsync(ForgotPasswordDto dto, CancellationToken cancellationToken = default)
     {
-        var user = await _userManager.FindByEmailAsync(dto.Email);
-        if (user == null)
+        const string genericMessage = "إذا كان البريد مسجلاً في النظام، فقد تم إرسال رمز التحقق إليه.";
+        var user = await _userManager.FindByEmailAsync(dto.Email.Trim());
+        if (user == null || !user.IsActive)
         {
             // Do not disclose user existence to prevent account enumeration
-            return (true, "إذا كان البريد مسجلاً، تم إرسال رمز التحقق", true, null);
+            return (true, genericMessage, true, null);
         }
 
         // Cryptographically secure 6-digit OTP generation
@@ -169,10 +193,10 @@ public class AuthService : IAuthService
 
         if (!emailSent)
         {
-            return (true, "تم توليد رمز التحقق، ولكن تعذر تسليمه للبريد الإلكتروني (يرجى مراجعة إعدادات خادم البريد SMTP)", false, emailError);
+            _logger.LogError("Password reset email dispatch failed for {Email}: {Error}", user.Email, emailError);
         }
 
-        return (true, "تم إرسال رمز التحقق بنجاح إلى البريد الإلكتروني", true, null);
+        return (true, genericMessage, true, null);
     }
 
     public async Task<(bool Succeeded, string Message)> VerifyResetCodeAsync(VerifyResetCodeDto dto, CancellationToken cancellationToken = default)
@@ -346,41 +370,31 @@ public class AuthService : IAuthService
         }
     }
 
-    public async Task TerminateSessionAsync(string? token, CancellationToken cancellationToken = default)
+    public async Task TerminateSessionAsync(string? userId, string? sessionId, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrEmpty(token)) return;
+        if (string.IsNullOrEmpty(userId) || string.IsNullOrEmpty(sessionId))
+            return;
 
-        try
+        var user = await _userManager.FindByIdAsync(userId);
+        if (user != null && user.CurrentSessionId == sessionId)
         {
-            var handler = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler();
-            if (handler.CanReadToken(token))
-            {
-                var jwt = handler.ReadJwtToken(token);
-                var userId = jwt.Claims.FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.NameIdentifier || c.Type == "sub")?.Value;
-                var sessionId = jwt.Claims.FirstOrDefault(c => c.Type == "SessionId")?.Value;
-
-                if (!string.IsNullOrEmpty(userId))
-                {
-                    var user = await _userManager.FindByIdAsync(userId);
-                    if (user != null && (sessionId == null || user.CurrentSessionId == sessionId))
-                    {
-                        user.CurrentSessionId = null;
-                        user.LastActivityUtc = null;
-                        await _userManager.UpdateAsync(user);
-                    }
-                }
-            }
-        }
-        catch
-        {
-            // Ignore any error during browser unload
+            user.CurrentSessionId = null;
+            user.LastActivityUtc = null;
+            await _userManager.UpdateAsync(user);
         }
     }
 
-    private static string ComputeOtpHash(string email, string code)
+    private string ComputeOtpHash(string email, string code)
     {
-        var input = $"{email.ToLowerInvariant()}:{code.Trim()}:CentralPressSecuritySalt2026";
-        var hashBytes = SHA256.HashData(Encoding.UTF8.GetBytes(input));
+        var secret = _configuration["Security:OtpSecret"];
+        if (string.IsNullOrWhiteSpace(secret))
+        {
+            secret = _configuration["JwtSettings:SecurityKey"] ?? string.Empty;
+        }
+
+        var input = $"{email.Trim().ToLowerInvariant()}:{code.Trim()}";
+        using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(secret));
+        var hashBytes = hmac.ComputeHash(Encoding.UTF8.GetBytes(input));
         return Convert.ToBase64String(hashBytes);
     }
 }

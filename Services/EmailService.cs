@@ -23,6 +23,8 @@ public class EmailService : IEmailService
     {
         _logger.LogInformation("[EMAIL DISPATCH] Password Reset Code dispatched for {Name} ({Email})", employeeName, email);
 
+        var safeName = WebUtility.HtmlEncode(employeeName);
+        var safeCode = WebUtility.HtmlEncode(resetCode);
         var subject = "مطبعة جامعة أسيوط - رمز استعادة كلمة المرور";
         var bodyHtml = $@"
             <div dir=""rtl"" style=""font-family: 'Segoe UI', Tahoma, -apple-system, BlinkMacSystemFont, Roboto, sans-serif; max-width: 620px; margin: 20px auto; background-color: #ffffff; border: 1px solid #cbd5e1; border-radius: 18px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.08); color: #0f172a;"">
@@ -38,7 +40,7 @@ public class EmailService : IEmailService
                 <!-- Body Content -->
                 <div style=""padding: 30px 26px; background-color: #ffffff; color: #0f172a;"">
                     <p style=""font-size: 16px; color: #0f172a !important; margin: 0 0 12px 0; font-weight: 700; line-height: 1.5;"">
-                        مرحباً <strong style=""color: #0f766e !important;"">{employeeName}</strong>،
+                        مرحباً <strong style=""color: #0f766e !important;"">{safeName}</strong>،
                     </p>
                     <p style=""font-size: 14px; color: #334155 !important; line-height: 1.7; margin: 0 0 24px 0; font-weight: 500;"">
                         لقد تلقينا طلباً لاستعادة وتعيين كلمة المرور الخاصة بحسابك على منظومة المطبعة المركزية. يرجى استخدام رمز التحقق المؤقت التالي لإتمام العملية:
@@ -50,7 +52,7 @@ public class EmailService : IEmailService
                             رمز التحقق المؤقت (OTP)
                         </div>
                         <div style=""font-family: monospace, Consolas, Courier, sans-serif; font-size: 36px; font-weight: 900; letter-spacing: 8px; color: #065f46 !important; background-color: #ffffff; border: 1px solid #a7f3d0; border-radius: 10px; display: inline-block; padding: 10px 24px; box-shadow: 0 2px 8px rgba(4,120,87,0.1);"">
-                            {resetCode}
+                            {safeCode}
                         </div>
                         <div style=""font-size: 12px; font-weight: 700; color: #047857 !important; margin-top: 10px;"">
                             ⏱️ هذا الرمز صالح لمدة 15 دقيقة فقط للاستخدام لمرة واحدة
@@ -76,6 +78,10 @@ public class EmailService : IEmailService
     {
         _logger.LogInformation("[EMAIL DISPATCH] New Employee Account Invitation dispatched for {Name} ({Email}), Code: {EmpCode}", employeeName, email, employeeCode);
 
+        var safeName = WebUtility.HtmlEncode(employeeName);
+        var safeEmpCode = WebUtility.HtmlEncode(employeeCode);
+        var safeEmail = WebUtility.HtmlEncode(email);
+        var safeInitialCode = WebUtility.HtmlEncode(initialCode);
         var subject = "مطبعة جامعة أسيوط - بيانات حسابك الجديد للدخول للنظام";
         var bodyHtml = $@"
             <div dir=""rtl"" style=""font-family: 'Segoe UI', Tahoma, -apple-system, BlinkMacSystemFont, Roboto, sans-serif; max-width: 620px; margin: 20px auto; background-color: #ffffff; border: 1px solid #cbd5e1; border-radius: 18px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.08); color: #0f172a;"">
@@ -91,7 +97,7 @@ public class EmailService : IEmailService
                 <!-- Body Content -->
                 <div style=""padding: 30px 26px; background-color: #ffffff; color: #0f172a;"">
                     <p style=""font-size: 16px; color: #0f172a !important; margin: 0 0 12px 0; font-weight: 800; line-height: 1.5;"">
-                        مرحباً بالزميل <strong style=""color: #0f766e !important;"">{employeeName}</strong>،
+                        مرحباً بالزميل <strong style=""color: #0f766e !important;"">{safeName}</strong>،
                     </p>
                     <p style=""font-size: 14px; color: #334155 !important; line-height: 1.7; margin: 0 0 22px 0; font-weight: 500;"">
                         تم إنشاء حساب وظيفي معتمد لك على منظومة مطبعة جامعة أسيوط. فيما يلي بيانات الدخول المبدئية الخاصة بك:
@@ -110,7 +116,7 @@ public class EmailService : IEmailService
                                     <span style=""color: #1e293b !important; font-weight: 800;"">كود الموظف:</span>
                                 </td>
                                 <td style=""padding: 10px 16px; font-family: monospace, Consolas, sans-serif; font-size: 16px; font-weight: 900; color: #065f46 !important; background-color: #ecfdf5; border-radius: 0 8px 8px 0; border: 1px solid #a7f3d0; border-right: none;"">
-                                    <span style=""color: #065f46 !important; font-weight: 900;"">{employeeCode}</span>
+                                    <span style=""color: #065f46 !important; font-weight: 900;"">{safeEmpCode}</span>
                                 </td>
                             </tr>
                             <!-- Row 2: Email -->
@@ -119,7 +125,7 @@ public class EmailService : IEmailService
                                     <span style=""color: #1e293b !important; font-weight: 800;"">البريد الإلكتروني:</span>
                                 </td>
                                 <td style=""padding: 10px 16px; font-family: monospace, Consolas, sans-serif; font-size: 14px; font-weight: 800; color: #0369a1 !important; background-color: #f0f9ff; border-radius: 0 8px 8px 0; border: 1px solid #bae6fd; border-right: none;"">
-                                    <span style=""color: #0369a1 !important; font-weight: 800;"">{email}</span>
+                                    <span style=""color: #0369a1 !important; font-weight: 800;"">{safeEmail}</span>
                                 </td>
                             </tr>
                             <!-- Row 3: Password -->
@@ -128,7 +134,7 @@ public class EmailService : IEmailService
                                     <span style=""color: #1e293b !important; font-weight: 800;"">كلمة المرور المؤقتة:</span>
                                 </td>
                                 <td style=""padding: 12px 16px; font-family: monospace, Consolas, sans-serif; font-size: 18px; font-weight: 900; color: #b91c1c !important; background-color: #fef2f2; border-radius: 0 8px 8px 0; border: 1px solid #fecaca; border-right: none; letter-spacing: 1px;"">
-                                    <span style=""color: #b91c1c !important; font-weight: 900;"">{initialCode}</span>
+                                    <span style=""color: #b91c1c !important; font-weight: 900;"">{safeInitialCode}</span>
                                 </td>
                             </tr>
                         </table>
@@ -161,8 +167,11 @@ public class EmailService : IEmailService
 
     public async Task<(bool Success, string Message, string? Details)> TestSmtpConnectionAsync(string testRecipientEmail)
     {
-        var host = _config["SmtpSettings:Host"];
-        var senderEmail = _config["SmtpSettings:SenderEmail"] ?? "ahta601@gmail.com";
+        var host = _config["SmtpSettings:Host"] ?? "";
+        var senderEmail = _config["SmtpSettings:SenderEmail"] ?? "";
+        var safeHost = WebUtility.HtmlEncode(host);
+        var safeSenderEmail = WebUtility.HtmlEncode(senderEmail);
+        var safeRecipient = WebUtility.HtmlEncode(testRecipientEmail);
 
         var subject = "مطبعة جامعة أسيوط - اختبار إرسال البريد الإلكتروني (SMTP Test)";
         var bodyHtml = $@"
@@ -196,7 +205,7 @@ public class EmailService : IEmailService
                                     <span style=""color: #1e293b !important; font-weight: 800;"">خادم البريد:</span>
                                 </td>
                                 <td style=""padding: 8px 0; font-family: monospace; font-size: 14px; font-weight: 800; color: #047857 !important;"">
-                                    <span style=""color: #047857 !important; font-weight: 800;"">{host}</span>
+                                    <span style=""color: #047857 !important; font-weight: 800;"">{safeHost}</span>
                                 </td>
                             </tr>
                             <tr>
@@ -204,7 +213,7 @@ public class EmailService : IEmailService
                                     <span style=""color: #1e293b !important; font-weight: 800;"">البريد المرسل:</span>
                                 </td>
                                 <td style=""padding: 8px 0; font-family: monospace; font-size: 14px; font-weight: 800; color: #0284c7 !important;"">
-                                    <span style=""color: #0284c7 !important; font-weight: 800;"">{senderEmail}</span>
+                                    <span style=""color: #0284c7 !important; font-weight: 800;"">{safeSenderEmail}</span>
                                 </td>
                             </tr>
                             <tr>
@@ -212,7 +221,7 @@ public class EmailService : IEmailService
                                     <span style=""color: #1e293b !important; font-weight: 800;"">المستلم التجريبي:</span>
                                 </td>
                                 <td style=""padding: 8px 0; font-family: monospace; font-size: 14px; font-weight: 800; color: #0f172a !important;"">
-                                    <span style=""color: #0f172a !important; font-weight: 800;"">{testRecipientEmail}</span>
+                                    <span style=""color: #0f172a !important; font-weight: 800;"">{safeRecipient}</span>
                                 </td>
                             </tr>
                             <tr>
@@ -254,24 +263,19 @@ public class EmailService : IEmailService
             var enableSsl = bool.TryParse(_config["SmtpSettings:EnableSsl"], out var ssl) && ssl;
             var rawUserName = _config["SmtpSettings:UserName"];
             var rawPassword = _config["SmtpSettings:Password"];
-            var senderEmail = _config["SmtpSettings:SenderEmail"] ?? "ahta601@gmail.com";
+            var senderEmail = _config["SmtpSettings:SenderEmail"];
             var senderName = _config["SmtpSettings:SenderName"] ?? "مطبعة جامعة أسيوط المركزية";
 
-            // Auto-Healing for Gmail and standard SMTP:
-            // If UserName is empty or does not contain '@' (e.g., 'Ahmed_mohamed_refaat'),
-            // automatically fallback to senderEmail ('ahta601@gmail.com') to ensure Gmail authentication succeeds!
-            var userName = (!string.IsNullOrWhiteSpace(rawUserName) && rawUserName.Contains("@"))
+            var userName = (!string.IsNullOrWhiteSpace(rawUserName))
                 ? rawUserName.Trim()
-                : senderEmail.Trim();
+                : senderEmail?.Trim();
 
-            // Auto-sanitizing: strip any spaces from Google App Password (e.g. 'bkyz ppec csjg uuze' -> 'bkyzppeccsjgouze')
             var password = rawPassword?.Replace(" ", "").Trim();
 
-            if (string.IsNullOrWhiteSpace(host) || string.IsNullOrWhiteSpace(userName) || string.IsNullOrWhiteSpace(password))
+            if (string.IsNullOrWhiteSpace(host) || string.IsNullOrWhiteSpace(senderEmail) || string.IsNullOrWhiteSpace(userName) || string.IsNullOrWhiteSpace(password))
             {
-                var missing = $"Host: {(string.IsNullOrWhiteSpace(host) ? "مفقود" : "متوفر")}, UserName: {(string.IsNullOrWhiteSpace(userName) ? "مفقود" : "متوفر")}, Password: {(string.IsNullOrWhiteSpace(password) ? "مفقود" : "متوفر")}";
-                _logger.LogWarning("[SMTP SKIPPED] Host, UserName or Password not configured properly: {Missing}", missing);
-                return (false, $"إعدادات SMTP غير مكتملة: {missing}");
+                _logger.LogWarning("[SMTP SKIPPED] Incomplete SmtpSettings configuration.");
+                return (false, "إعدادات خادم البريد الإلكتروني (SMTP) غير مكتملة.");
             }
 
             int port = 587;
@@ -302,7 +306,7 @@ public class EmailService : IEmailService
         catch (Exception ex)
         {
             _logger.LogError(ex, "[SMTP FAILURE] Could not dispatch email via SMTP ({Message})", ex.Message);
-            return (false, ex.Message);
+            return (false, "تعذر الاتصال بخادم البريد الإلكتروني (SMTP). يرجى مراجعة سجلات الخادم.");
         }
     }
 }

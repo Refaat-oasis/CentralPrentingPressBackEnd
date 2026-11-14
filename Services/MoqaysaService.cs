@@ -313,43 +313,9 @@ public class MoqaysaService : IMoqaysaService
             });
         }
 
+        await AssignAccountSharesAsync(moqaysa, dto.AccountShares, customer.AccountId, ct);
+
         _context.Moqaysat.Add(moqaysa);
-        await _context.SaveChangesAsync(ct);
-
-        // Handle AccountShares
-        if (dto.AccountShares != null && dto.AccountShares.Count > 0)
-        {
-            decimal totalPct = dto.AccountShares.Sum(s => s.SharePercentage);
-            if (Math.Abs(totalPct - 100m) > 0.01m)
-                throw new InvalidOperationException($"مجموع نسب الحسابات الدافعة يجب أن يساوي 100%. المجموع الحالي: {totalPct}%");
-
-            foreach (var share in dto.AccountShares)
-            {
-                moqaysa.AccountShares.Add(new MoqaysaAccountShare
-                {
-                    MoqaysaId = moqaysa.MoqaysaId,
-                    AccountId = share.AccountId,
-                    SharePercentage = share.SharePercentage,
-                    AllocatedAmount = MoqaysaCalculationService.Round2(moqaysa.FinalGrandTotal * (share.SharePercentage / 100m))
-                });
-            }
-        }
-        else
-        {
-            // Ensure customer account is loaded
-            if (customer.Account == null)
-                await _context.Entry(customer).Reference(c => c.Account).LoadAsync(ct);
-
-            int defaultAccountId = customer.AccountId;
-            moqaysa.AccountShares.Add(new MoqaysaAccountShare
-            {
-                MoqaysaId = moqaysa.MoqaysaId,
-                AccountId = defaultAccountId,
-                SharePercentage = 100.00m,
-                AllocatedAmount = moqaysa.FinalGrandTotal
-            });
-        }
-
         await _context.SaveChangesAsync(ct);
 
         await _context.Entry(moqaysa).Reference(m => m.Customer).Query().Include(c => c.Account).LoadAsync(ct);
@@ -452,52 +418,65 @@ public class MoqaysaService : IMoqaysaService
             });
         }
 
-        await _context.SaveChangesAsync(ct);
-
-        // Handle AccountShares on update
-        if (dto.AccountShares != null && dto.AccountShares.Count > 0)
+        int defaultAccountId = moqaysa.Customer?.AccountId ?? 0;
+        if (defaultAccountId == 0)
         {
-            decimal totalPct = dto.AccountShares.Sum(s => s.SharePercentage);
-            if (Math.Abs(totalPct - 100m) > 0.01m)
-                throw new InvalidOperationException($"مجموع نسب الحسابات الدافعة يجب أن يساوي 100%. المجموع الحالي: {totalPct}%");
-
-            foreach (var share in dto.AccountShares)
-            {
-                moqaysa.AccountShares.Add(new MoqaysaAccountShare
-                {
-                    MoqaysaId = moqaysa.MoqaysaId,
-                    AccountId = share.AccountId,
-                    SharePercentage = share.SharePercentage,
-                    AllocatedAmount = MoqaysaCalculationService.Round2(moqaysa.FinalGrandTotal * (share.SharePercentage / 100m))
-                });
-            }
+            var cust = await _context.Customers.FindAsync(new object[] { moqaysa.CustomerId }, ct);
+            defaultAccountId = cust?.AccountId ?? 0;
         }
-        else
-        {
-            int defaultAccountId = moqaysa.Customer?.AccountId ?? 0;
-            if (defaultAccountId == 0)
-            {
-                var cust = await _context.Customers.FindAsync(new object[] { moqaysa.CustomerId }, ct);
-                defaultAccountId = cust?.AccountId ?? 0;
-            }
 
-            if (defaultAccountId > 0)
-            {
-                moqaysa.AccountShares.Add(new MoqaysaAccountShare
-                {
-                    MoqaysaId = moqaysa.MoqaysaId,
-                    AccountId = defaultAccountId,
-                    SharePercentage = 100.00m,
-                    AllocatedAmount = moqaysa.FinalGrandTotal
-                });
-            }
-        }
+        await AssignAccountSharesAsync(moqaysa, dto.AccountShares, defaultAccountId, ct);
 
         await _context.SaveChangesAsync(ct);
 
         // Reload AccountShares with Account navigation for mapping
         await _context.Entry(moqaysa).Collection(m => m.AccountShares).Query().Include(s => s.Account).LoadAsync(ct);
         return MapToDetailViewModel(moqaysa);
+    }
+
+    private async Task AssignAccountSharesAsync(
+        Moqaysa moqaysa,
+        List<MoqaysaAccountShareDto>? shares,
+        int defaultAccountId,
+        CancellationToken ct)
+    {
+        if (shares != null && shares.Count > 0)
+        {
+            if (shares.Any(s => s.SharePercentage <= 0m || s.SharePercentage > 100m))
+                throw new InvalidOperationException("يجب أن تكون نسبة كل حساب دافع أكبر من 0% ولا تتجاوز 100%.");
+
+            var requestedIds = shares.Select(s => s.AccountId).ToList();
+            if (requestedIds.Distinct().Count() != requestedIds.Count)
+                throw new InvalidOperationException("لا يمكن تكرار نفس الحساب المحاسبي الدافع ضمن المقايسة الواحدة.");
+
+            decimal totalPct = shares.Sum(s => s.SharePercentage);
+            if (Math.Abs(totalPct - 100m) > 0.01m)
+                throw new InvalidOperationException($"مجموع نسب الحسابات الدافعة يجب أن يساوي 100%. المجموع الحالي: {totalPct}%");
+
+            var existingCount = await _context.Accounts
+                .CountAsync(a => requestedIds.Contains(a.AccountId), ct);
+            if (existingCount != requestedIds.Count)
+                throw new InvalidOperationException("أحد الحسابات المحاسبية المحددة غير موجود أو معطل.");
+
+            foreach (var share in shares)
+            {
+                moqaysa.AccountShares.Add(new MoqaysaAccountShare
+                {
+                    AccountId = share.AccountId,
+                    SharePercentage = share.SharePercentage,
+                    AllocatedAmount = MoqaysaCalculationService.Round2(moqaysa.FinalGrandTotal * (share.SharePercentage / 100m))
+                });
+            }
+        }
+        else if (defaultAccountId > 0)
+        {
+            moqaysa.AccountShares.Add(new MoqaysaAccountShare
+            {
+                AccountId = defaultAccountId,
+                SharePercentage = 100.00m,
+                AllocatedAmount = moqaysa.FinalGrandTotal
+            });
+        }
     }
 
     public async Task<bool> ToggleActiveAsync(int id, CancellationToken ct = default)
