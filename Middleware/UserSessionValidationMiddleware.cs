@@ -36,8 +36,10 @@ public class UserSessionValidationMiddleware
 
         var path = context.Request.Path.Value?.ToLowerInvariant() ?? "";
 
-        // 3. Allow logout & terminate endpoints to proceed
-        if (path.Contains("/api/auth/logout") || path.Contains("/api/auth/terminate-session"))
+        // 3. Allow logout, refresh, change-password, me, and terminate endpoints to proceed
+        if (path.Contains("/api/auth/logout") ||
+            path.Contains("/api/auth/terminate-session") ||
+            path.Contains("/api/auth/refresh"))
         {
             await _next(context);
             return;
@@ -85,7 +87,7 @@ public class UserSessionValidationMiddleware
         }
 
         // 5. Validate Inactivity / Idle Timeout
-        var idleTimeoutMinutes = configuration.GetValue<double>("SessionSettings:IdleTimeoutMinutes", 15);
+        var idleTimeoutMinutes = configuration.GetValue<double>("SessionSettings:IdleTimeoutMinutes", 30);
         var maxLifetimeHours = configuration.GetValue<double>("SessionSettings:MaxSessionLifetimeHours", 12);
 
         if (user.LastActivityUtc.HasValue &&
@@ -120,7 +122,25 @@ public class UserSessionValidationMiddleware
             return;
         }
 
-        // 7. Update LastActivityUtc with Throttling (once every 30s)
+        // 7. Enforce mandatory password change before allowing business API calls
+        if (user.MustChangePassword &&
+            !path.Contains("/api/auth/change-password") &&
+            !path.Contains("/api/auth/me") &&
+            !path.Contains("/api/auth/heartbeat") &&
+            !path.Contains("/api/auth/logout") &&
+            !path.Contains("/api/auth/terminate-session"))
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            context.Response.ContentType = "application/json; charset=utf-8";
+            await context.Response.WriteAsJsonAsync(new
+            {
+                code = "MUST_CHANGE_PASSWORD",
+                message = "يجب تغيير كلمة المرور المؤقتة قبل متابعة استخدام النظام."
+            });
+            return;
+        }
+
+        // 8. Update LastActivityUtc with Throttling (once every 30s)
         if (!user.LastActivityUtc.HasValue || (DateTime.UtcNow - user.LastActivityUtc.Value).TotalSeconds >= 30)
         {
             user.LastActivityUtc = DateTime.UtcNow;

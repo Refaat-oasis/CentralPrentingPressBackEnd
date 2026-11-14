@@ -51,7 +51,6 @@ public class PdfExportService
             Path.Combine(AppContext.BaseDirectory, "assets", "assiut-univ-logo.png"),
             Path.Combine(Directory.GetCurrentDirectory(), "assets", "assiut-univ-logo.png"),
             Path.Combine(Directory.GetCurrentDirectory(), "CentralPrentingPressBackEnd", "assets", "assiut-univ-logo.png"),
-            @"C:\Users\Ziad\Desktop\Freelance projects\Prenting System\CentralPrentingPressFrontEnd\src\assets\assiut-univ-logo.png",
             Path.Combine(Directory.GetCurrentDirectory(), "..", "CentralPrentingPressFrontEnd", "src", "assets", "assiut-univ-logo.png")
         };
 

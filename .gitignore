@@ -7,7 +7,6 @@
 [Rr]elease/
 x64/
 x86/
-[Aa]ssets/
 
 ## Visual Studio & Rider IDE files
 .vs/
@@ -26,6 +25,7 @@ PublishProfiles/
 
 ## Environment & sensitive secrets
 appsettings.Development.json
+appsettings.Production.json
 appsettings.*.local.json
 *.local.json
 

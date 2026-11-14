@@ -28,6 +28,7 @@ public class MoqaysaController : ControllerBase
     }
 
     [HttpPost("calculate-preview")]
+    [PermissionAuthorize("MOQAYSA", "CanAccess")]
     public async Task<ActionResult<MoqaysaCalculationResultViewModel>> CalculatePreview(
         [FromBody] MoqaysaSaveDto dto,
         CancellationToken ct)
@@ -37,6 +38,7 @@ public class MoqaysaController : ControllerBase
     }
 
     [HttpPost("calculate-paper-cutting")]
+    [PermissionAuthorize("MOQAYSA", "CanAccess")]
     public ActionResult<PaperCuttingCalculationResultViewModel> CalculatePaperCutting(
         [FromBody] PaperCuttingCalculationRequestDto request)
     {
@@ -129,6 +131,7 @@ public class MoqaysaController : ControllerBase
     }
 
     [HttpGet("{id}/export-word")]
+    [PermissionAuthorize("MOQAYSA", "CanAccess")]
     public async Task<IActionResult> ExportWord(int id, CancellationToken ct)
     {
         var bytes = await _moqaysaService.ExportWordAsync(id, ct);
@@ -140,6 +143,7 @@ public class MoqaysaController : ControllerBase
     }
 
     [HttpGet("{id}/export-pdf")]
+    [PermissionAuthorize("MOQAYSA", "CanAccess")]
     public async Task<IActionResult> ExportPdf(int id, CancellationToken ct)
     {
         var bytes = await _moqaysaService.ExportPdfAsync(id, ct);

@@ -8,6 +8,7 @@ using CentralPress.API.Services;
 using CentralPress.API.ViewModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 
 namespace CentralPress.API.Controllers;
 
@@ -17,10 +18,12 @@ namespace CentralPress.API.Controllers;
 public class TasweyaController : ControllerBase
 {
     private readonly ITasweyaService _tasweyaService;
+    private readonly ILogger<TasweyaController> _logger;
 
-    public TasweyaController(ITasweyaService tasweyaService)
+    public TasweyaController(ITasweyaService tasweyaService, ILogger<TasweyaController> logger)
     {
         _tasweyaService = tasweyaService;
+        _logger = logger;
     }
 
     [HttpGet("unsettled-moqaysat")]
@@ -63,25 +66,62 @@ public class TasweyaController : ControllerBase
     [PermissionAuthorize("TASWEYA", "CanCreate")]
     public async Task<IActionResult> Create([FromBody] CreateTasweyaDto dto, CancellationToken ct)
     {
-        var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        var (success, message, result) = await _tasweyaService.CreateAsync(dto, currentUserId, ct);
+        try
+        {
+            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var (success, message, result) = await _tasweyaService.CreateAsync(dto, currentUserId, ct);
 
-        if (!success || result == null)
-            return BadRequest(new { message });
+            if (!success || result == null)
+                return BadRequest(new { message });
 
-        return Ok(result);
+            return Ok(result);
+        }
+        catch (System.Exception ex)
+        {
+            _logger.LogError(ex, "Error creating Tasweya");
+            return StatusCode(500, new { message = "حدث خطأ غير متوقع أثناء إصدار كشف التسوية." });
+        }
+    }
+
+    [HttpPost("multi-account")]
+    [PermissionAuthorize("TASWEYA", "CanCreate")]
+    public async Task<IActionResult> CreateMultiAccount([FromBody] CreateMultiAccountTasweyaDto dto, CancellationToken ct)
+    {
+        try
+        {
+            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var (success, message, result) = await _tasweyaService.CreateMultiAccountAsync(dto, currentUserId, ct);
+
+            if (!success || result == null)
+                return BadRequest(new { message });
+
+            return Ok(result);
+        }
+        catch (System.Exception ex)
+        {
+            _logger.LogError(ex, "Error creating multi-account Tasweya");
+            return StatusCode(500, new { message = "حدث خطأ غير متوقع أثناء إصدار كشوف التسوية المتعددة." });
+        }
     }
 
     [HttpPut("{id}")]
     [PermissionAuthorize("TASWEYA", "CanUpdate")]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateTasweyaDto dto, CancellationToken ct)
     {
-        var (success, message, tasweyaId) = await _tasweyaService.UpdateAsync(id, dto, ct);
+        try
+        {
+            var (success, message, tasweyaId) = await _tasweyaService.UpdateAsync(id, dto, ct);
 
-        if (!success)
-            return BadRequest(new { message });
+            if (!success)
+                return BadRequest(new { message });
 
-        return Ok(new { message, tasweyaId });
+            return Ok(new { message, tasweyaId });
+        }
+        catch (System.Exception ex)
+        {
+            _logger.LogError(ex, "Error updating Tasweya {Id}", id);
+            return StatusCode(500, new { message = "حدث خطأ غير متوقع أثناء تحديث كشف التسوية." });
+        }
     }
 
     [HttpPatch("{id}/toggle-active")]

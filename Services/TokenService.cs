@@ -105,7 +105,7 @@ public class TokenService : ITokenService
             claims.Add(new Claim("permission", perm));
         }
 
-        var expiresMinutes = double.TryParse(_configuration["JwtSettings:ExpiryMinutes"], out var m) ? m : 30;
+        var expiresMinutes = double.TryParse(_configuration["JwtSettings:ExpiryMinutes"], out var m) && m > 0 ? m : 15;
         var expiresAtUtc = DateTime.UtcNow.AddMinutes(expiresMinutes);
 
         var key = new SymmetricSecurityKey(_keyBytes);
@@ -153,6 +153,13 @@ public class TokenService : ITokenService
 
     public async Task<AuthTokenViewModel?> RefreshTokenAsync(string refreshToken, string? ipAddress)
     {
+        if (string.IsNullOrWhiteSpace(refreshToken))
+            return null;
+
+        await using var tx = _context.Database.IsRelational()
+            ? await _context.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable)
+            : null;
+
         var existingToken = await _context.RefreshTokens
             .Include(t => t.User)
             .ThenInclude(u => u!.JobTitle)
@@ -165,6 +172,7 @@ public class TokenService : ITokenService
         if (existingToken.IsRevoked)
         {
             await RevokeAllUserTokensAsync(existingToken.UserId, ipAddress);
+            if (tx != null) await tx.CommitAsync();
             return null;
         }
 
@@ -172,7 +180,7 @@ public class TokenService : ITokenService
             return null;
 
         var user = existingToken.User;
-        if (user == null || !user.IsActive)
+        if (user == null || !user.IsActive || await _userManager.IsLockedOutAsync(user))
             return null;
 
         // Rotate token
@@ -193,15 +201,22 @@ public class TokenService : ITokenService
         _context.RefreshTokens.Add(newRefreshToken);
         await _context.SaveChangesAsync();
 
-        // Issue new JWT
+        // Issue new JWT preserving current session continuity
         var roles = (await _userManager.GetRolesAsync(user)).ToList();
         if (!roles.Any()) roles.Add("Employee");
 
-        var sessionId = Guid.NewGuid().ToString();
+        var sessionId = !string.IsNullOrEmpty(user.CurrentSessionId)
+            ? user.CurrentSessionId
+            : Guid.NewGuid().ToString();
         user.CurrentSessionId = sessionId;
         user.LastActivityUtc = DateTime.UtcNow;
-        user.SessionStartedUtc = DateTime.UtcNow;
+        user.SessionStartedUtc ??= DateTime.UtcNow;
         await _userManager.UpdateAsync(user);
+
+        if (tx != null)
+        {
+            await tx.CommitAsync();
+        }
 
         var claims = new List<Claim>
         {
@@ -237,7 +252,7 @@ public class TokenService : ITokenService
             claims.Add(new Claim("permission", perm));
         }
 
-        var expiresMinutes = double.TryParse(_configuration["JwtSettings:ExpiryMinutes"], out var m) ? m : 30;
+        var expiresMinutes = double.TryParse(_configuration["JwtSettings:ExpiryMinutes"], out var m) && m > 0 ? m : 15;
         var expiresAtUtc = DateTime.UtcNow.AddMinutes(expiresMinutes);
 
         var key = new SymmetricSecurityKey(_keyBytes);

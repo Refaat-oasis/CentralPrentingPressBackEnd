@@ -9,16 +9,19 @@ using CentralPress.API.Entities;
 using CentralPress.API.ViewModels;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Logging;
 
 namespace CentralPress.API.Services;
 
 public class JobTitleService : IJobTitleService
 {
     private readonly ApplicationDbContext _context;
+    private readonly ILogger<JobTitleService> _logger;
 
-    public JobTitleService(ApplicationDbContext context)
+    public JobTitleService(ApplicationDbContext context, ILogger<JobTitleService> logger)
     {
         _context = context;
+        _logger = logger;
     }
 
     public async Task<List<JobTitleSummaryViewModel>> GetAllAsync(CancellationToken cancellationToken = default)
@@ -177,7 +180,8 @@ public class JobTitleService : IJobTitleService
             {
                 await transaction.RollbackAsync(cancellationToken);
             }
-            return (false, $"حدث خطأ أثناء حفظ الصلاحيات: {ex.Message}");
+            _logger.LogError(ex, "Error saving role permissions for job title {JobTitleId}", id);
+            return (false, "حدث خطأ غير متوقع أثناء حفظ الصلاحيات.");
         }
     }
 
@@ -235,7 +239,8 @@ public class JobTitleService : IJobTitleService
             {
                 await transaction.RollbackAsync(cancellationToken);
             }
-            return (false, $"حدث خطأ أثناء حذف المسمى الوظيفي: {ex.Message}");
+            _logger.LogError(ex, "Error deleting job title {JobTitleId}", id);
+            return (false, "حدث خطأ غير متوقع أثناء حذف المسمى الوظيفي.");
         }
     }
 }

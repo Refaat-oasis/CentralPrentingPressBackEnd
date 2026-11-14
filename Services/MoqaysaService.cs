@@ -98,8 +98,11 @@ public class MoqaysaService : IMoqaysaService
         CancellationToken ct = default)
     {
         var query = _context.Moqaysat
+            .IgnoreQueryFilters()
             .Include(m => m.Customer)
                 .ThenInclude(c => c!.Account)
+            .Include(m => m.AccountShares)
+                .ThenInclude(s => s.Account)
             .AsQueryable();
 
         if (customerId.HasValue) query = query.Where(m => m.CustomerId == customerId.Value);
@@ -112,28 +115,91 @@ public class MoqaysaService : IMoqaysaService
             .OrderByDescending(m => m.MoqaysaId)
             .ToListAsync(ct);
 
-        return list.Select(m => new MoqaysaSummaryViewModel
+        var moqaysaIds = list.Select(m => m.MoqaysaId).ToList();
+        var activeLinks = await _context.TasweyaMoqaysaLinks
+            .AsNoTracking()
+            .Where(l => moqaysaIds.Contains(l.MoqaysaId) && l.Tasweya != null && l.Tasweya.IsActive)
+            .Select(l => new
+            {
+                l.MoqaysaId,
+                l.Tasweya!.AccountId,
+                l.TasweyaId,
+                l.Tasweya.SettlementNumber
+            })
+            .ToListAsync(ct);
+
+        var linkLookup = activeLinks
+            .GroupBy(x => (x.MoqaysaId, x.AccountId))
+            .ToDictionary(g => g.Key, g => g.First());
+
+        return list.Select(m =>
         {
-            MoqaysaId = m.MoqaysaId,
-            JobOrderNumber = m.JobOrderNumber,
-            CustomerId = m.CustomerId,
-            CustomerName = m.Customer?.CustomerNameAr ?? "غير محدد",
-            AccountCode = m.Customer?.Account?.AccountCode ?? "",
-            RequiredQuantityText = m.RequiredQuantityText,
-            RawMaterials = m.RawMaterials,
-            TotalMaterials = m.TotalMaterials,
-            TotalWorkerWages = m.TotalWorkerWages,
-            TotalMachineCosts = m.TotalMachineCosts,
-            SubTotal1 = m.SubTotal1,
-            SubTotal2 = m.SubTotal2,
-            SubTotal3 = m.SubTotal3,
-            FinalGrandTotal = m.FinalGrandTotal,
-            ApplyVat = m.ApplyVat,
-            VatAmount = m.VatAmount,
-            IsIncludedInTasweya = m.IsIncludedInTasweya,
-            IsPaid = m.IsPaid,
-            IsActive = m.IsActive,
-            CreatedAtUtc = m.CreatedAtUtc
+            var shareVms = m.AccountShares.Select(s =>
+            {
+                linkLookup.TryGetValue((m.MoqaysaId, s.AccountId), out var activeLink);
+                return new MoqaysaAccountShareViewModel
+                {
+                    ShareId = s.ShareId,
+                    AccountId = s.AccountId,
+                    AccountNameAr = s.Account?.AccountNameAr ?? string.Empty,
+                    DebitHeaderTextAr = s.Account?.DebitHeaderTextAr ?? string.Empty,
+                    SharePercentage = s.SharePercentage,
+                    AllocatedAmount = s.AllocatedAmount,
+                    IsIncludedInTasweya = s.IsIncludedInTasweya,
+                    IsPaid = s.IsPaid,
+                    PaidAtUtc = s.PaidAtUtc,
+                    TasweyaId = activeLink?.TasweyaId,
+                    SettlementNumber = activeLink?.SettlementNumber
+                };
+            }).ToList();
+
+            string summaryText = shareVms.Count > 0
+                ? string.Join(" ، ", shareVms.Select(s => $"{s.AccountNameAr} ({s.SharePercentage}%)"))
+                : string.Empty;
+
+            bool isPartialTasweya = shareVms.Any(s => s.IsIncludedInTasweya) && !m.IsIncludedInTasweya;
+            bool isPartialPaid = shareVms.Any(s => s.IsPaid) && !m.IsPaid;
+
+            return new MoqaysaSummaryViewModel
+            {
+                MoqaysaId = m.MoqaysaId,
+                JobOrderNumber = m.JobOrderNumber,
+                CustomerId = m.CustomerId,
+                CustomerName = m.Customer?.CustomerNameAr ?? "غير محدد",
+                AccountCode = m.Customer?.Account?.AccountCode ?? "",
+                RequiredQuantityText = m.RequiredQuantityText,
+                RawMaterials = m.RawMaterials,
+                TotalMaterials = m.TotalMaterials,
+                TotalWorkerWages = m.TotalWorkerWages,
+                TotalMachineCosts = m.TotalMachineCosts,
+                SubTotal1 = m.SubTotal1,
+                AdminExpenses = m.AdminExpenses,
+                MarkupAmount = m.MarkupAmount,
+                MinistryOfFinanceFee = m.MinistryOfFinanceFee,
+                WorkersSyndicateFund = m.WorkersSyndicateFund,
+                SubTotal2 = m.SubTotal2,
+                ApplyOther = m.ApplyOther,
+                OtherAmount = m.OtherAmount,
+                SubTotal3 = m.SubTotal3,
+                FinalGrandTotal = m.FinalGrandTotal,
+                SelectedMaterialProcessingPercent = m.SelectedMaterialProcessingPercent,
+                SelectedAdminExpensesPercent = m.SelectedAdminExpensesPercent,
+                SelectedMarkupPercent = m.SelectedMarkupPercent,
+                SelectedMinistryOfFinancePercent = m.SelectedMinistryOfFinancePercent,
+                SelectedWorkersFundPercent = m.SelectedWorkersFundPercent,
+                SelectedOtherPercent = m.SelectedOtherPercent,
+                SelectedVatPercent = m.SelectedVatPercent,
+                ApplyVat = m.ApplyVat,
+                VatAmount = m.VatAmount,
+                IsIncludedInTasweya = m.IsIncludedInTasweya,
+                IsPartiallyIncludedInTasweya = isPartialTasweya,
+                IsPaid = m.IsPaid,
+                IsPartiallyPaid = isPartialPaid,
+                IsActive = m.IsActive,
+                CreatedAtUtc = m.CreatedAtUtc,
+                AccountShares = shareVms,
+                PayingAccountsSummaryText = summaryText
+            };
         }).ToList();
     }
 
@@ -145,6 +211,8 @@ public class MoqaysaService : IMoqaysaService
                 .ThenInclude(c => c!.Account)
             .Include(x => x.MaterialItems)
             .Include(x => x.MachineryItems)
+            .Include(x => x.AccountShares)
+                .ThenInclude(s => s.Account)
             .FirstOrDefaultAsync(x => x.MoqaysaId == id, ct);
 
         return m == null ? null : MapToDetailViewModel(m);
@@ -154,9 +222,13 @@ public class MoqaysaService : IMoqaysaService
     {
         ArgumentNullException.ThrowIfNull(dto);
         if (string.IsNullOrWhiteSpace(dto.JobOrderNumber))
-            throw new ArgumentException("يرجى كتابة رقم إذن التشغيل", nameof(dto.JobOrderNumber));
+        {
+            dto.JobOrderNumber = $"{DateTime.UtcNow:yyyyMMdd}-{Random.Shared.Next(100, 999)}";
+        }
 
-        var customer = await _context.Customers.FindAsync(new object[] { dto.CustomerId }, ct);
+        var customer = await _context.Customers
+            .Include(c => c.Account)
+            .FirstOrDefaultAsync(c => c.CustomerId == dto.CustomerId, ct);
         if (customer == null)
             throw new InvalidOperationException("الجهة الطالبة غير موجودة");
 
@@ -173,6 +245,7 @@ public class MoqaysaService : IMoqaysaService
             SpecificationsText = dto.SpecificationsText?.Trim() ?? "",
 
             RawMaterials = calc.RawMaterials,
+            SelectedMaterialProcessingPercent = calc.MaterialProcessingPercent,
             MaterialProcessingFee = calc.MaterialProcessingFee,
             FilmsProcessingFee = calc.FilmsProcessingFee,
             TotalMaterials = calc.TotalMaterials,
@@ -180,19 +253,24 @@ public class MoqaysaService : IMoqaysaService
             TotalMachineCosts = calc.TotalMachineCosts,
             SubTotal1 = calc.SubTotal1,
             ApplyAdminExpenses = calc.ApplyAdminExpenses,
+            SelectedAdminExpensesPercent = calc.AdminExpensesPercent,
             AdminExpenses = calc.AdminExpenses,
             TotalExpenses = calc.TotalExpenses,
             ApplyMarkup = calc.ApplyMarkup,
             SelectedMarkupPercent = calc.SelectedMarkupPercent,
             MarkupAmount = calc.MarkupAmount,
             TotalAfterMarkup = calc.TotalAfterMarkup,
+            SelectedMinistryOfFinancePercent = calc.MinistryOfFinancePercent,
             MinistryOfFinanceFee = calc.MinistryOfFinanceFee,
+            SelectedWorkersFundPercent = calc.WorkersFundPercent,
             WorkersSyndicateFund = calc.WorkersSyndicateFund,
             SubTotal2 = calc.SubTotal2,
             ApplyOther = calc.ApplyOther,
+            SelectedOtherPercent = calc.OtherPercent,
             OtherAmount = calc.OtherAmount,
             SubTotal3 = calc.SubTotal3,
             ApplyVat = calc.ApplyVat,
+            SelectedVatPercent = calc.VatPercent,
             VatAmount = calc.VatAmount,
             FinalGrandTotal = calc.FinalGrandTotal,
 
@@ -235,10 +313,13 @@ public class MoqaysaService : IMoqaysaService
             });
         }
 
+        await AssignAccountSharesAsync(moqaysa, dto.AccountShares, customer.AccountId, ct);
+
         _context.Moqaysat.Add(moqaysa);
         await _context.SaveChangesAsync(ct);
 
         await _context.Entry(moqaysa).Reference(m => m.Customer).Query().Include(c => c.Account).LoadAsync(ct);
+        await _context.Entry(moqaysa).Collection(m => m.AccountShares).Query().Include(s => s.Account).LoadAsync(ct);
         return MapToDetailViewModel(moqaysa);
     }
 
@@ -250,24 +331,29 @@ public class MoqaysaService : IMoqaysaService
                 .ThenInclude(c => c!.Account)
             .Include(m => m.MaterialItems)
             .Include(m => m.MachineryItems)
+            .Include(m => m.AccountShares)
             .FirstOrDefaultAsync(m => m.MoqaysaId == id, ct);
 
         if (moqaysa == null) return null;
 
-        if (moqaysa.IsIncludedInTasweya)
-            throw new InvalidOperationException("لا يمكن تعديل المقايسة لأنها مُدرجة بالفعل في كشف تسوية / مطالبة رسمية");
+        if (moqaysa.IsIncludedInTasweya || moqaysa.AccountShares.Any(s => s.IsIncludedInTasweya))
+            throw new InvalidOperationException("لا يمكن تعديل المقايسة لأنها مُدرجة بالفعل (أو إحدى حصصها المالية مُدرجة) في كشف تسوية / مطالبة رسمية");
 
         // Validate machinery maintenance status (MED-11)
         await ValidateMachineriesOperationalAsync(dto.MachineryItems, ct);
 
         var calc = await PerformCalculationInternalAsync(dto, ct);
 
-        moqaysa.JobOrderNumber = dto.JobOrderNumber.Trim();
+        if (!string.IsNullOrWhiteSpace(dto.JobOrderNumber))
+        {
+            moqaysa.JobOrderNumber = dto.JobOrderNumber.Trim();
+        }
         moqaysa.CustomerId = dto.CustomerId;
         moqaysa.RequiredQuantityText = dto.RequiredQuantityText?.Trim() ?? "";
         moqaysa.SpecificationsText = dto.SpecificationsText?.Trim() ?? "";
 
         moqaysa.RawMaterials = calc.RawMaterials;
+        moqaysa.SelectedMaterialProcessingPercent = calc.MaterialProcessingPercent;
         moqaysa.MaterialProcessingFee = calc.MaterialProcessingFee;
         moqaysa.FilmsProcessingFee = calc.FilmsProcessingFee;
         moqaysa.TotalMaterials = calc.TotalMaterials;
@@ -275,24 +361,30 @@ public class MoqaysaService : IMoqaysaService
         moqaysa.TotalMachineCosts = calc.TotalMachineCosts;
         moqaysa.SubTotal1 = calc.SubTotal1;
         moqaysa.ApplyAdminExpenses = calc.ApplyAdminExpenses;
+        moqaysa.SelectedAdminExpensesPercent = calc.AdminExpensesPercent;
         moqaysa.AdminExpenses = calc.AdminExpenses;
         moqaysa.TotalExpenses = calc.TotalExpenses;
         moqaysa.ApplyMarkup = calc.ApplyMarkup;
         moqaysa.SelectedMarkupPercent = calc.SelectedMarkupPercent;
         moqaysa.MarkupAmount = calc.MarkupAmount;
         moqaysa.TotalAfterMarkup = calc.TotalAfterMarkup;
+        moqaysa.SelectedMinistryOfFinancePercent = calc.MinistryOfFinancePercent;
         moqaysa.MinistryOfFinanceFee = calc.MinistryOfFinanceFee;
+        moqaysa.SelectedWorkersFundPercent = calc.WorkersFundPercent;
         moqaysa.WorkersSyndicateFund = calc.WorkersSyndicateFund;
         moqaysa.SubTotal2 = calc.SubTotal2;
         moqaysa.ApplyOther = calc.ApplyOther;
+        moqaysa.SelectedOtherPercent = calc.OtherPercent;
         moqaysa.OtherAmount = calc.OtherAmount;
         moqaysa.SubTotal3 = calc.SubTotal3;
         moqaysa.ApplyVat = calc.ApplyVat;
+        moqaysa.SelectedVatPercent = calc.VatPercent;
         moqaysa.VatAmount = calc.VatAmount;
         moqaysa.FinalGrandTotal = calc.FinalGrandTotal;
 
         _context.MoqaysaMaterialItems.RemoveRange(moqaysa.MaterialItems);
         _context.MoqaysaMachineryItems.RemoveRange(moqaysa.MachineryItems);
+        _context.MoqaysaAccountShares.RemoveRange(moqaysa.AccountShares);
 
         foreach (var mat in dto.MaterialItems)
         {
@@ -326,8 +418,65 @@ public class MoqaysaService : IMoqaysaService
             });
         }
 
+        int defaultAccountId = moqaysa.Customer?.AccountId ?? 0;
+        if (defaultAccountId == 0)
+        {
+            var cust = await _context.Customers.FindAsync(new object[] { moqaysa.CustomerId }, ct);
+            defaultAccountId = cust?.AccountId ?? 0;
+        }
+
+        await AssignAccountSharesAsync(moqaysa, dto.AccountShares, defaultAccountId, ct);
+
         await _context.SaveChangesAsync(ct);
+
+        // Reload AccountShares with Account navigation for mapping
+        await _context.Entry(moqaysa).Collection(m => m.AccountShares).Query().Include(s => s.Account).LoadAsync(ct);
         return MapToDetailViewModel(moqaysa);
+    }
+
+    private async Task AssignAccountSharesAsync(
+        Moqaysa moqaysa,
+        List<MoqaysaAccountShareDto>? shares,
+        int defaultAccountId,
+        CancellationToken ct)
+    {
+        if (shares != null && shares.Count > 0)
+        {
+            if (shares.Any(s => s.SharePercentage <= 0m || s.SharePercentage > 100m))
+                throw new InvalidOperationException("يجب أن تكون نسبة كل حساب دافع أكبر من 0% ولا تتجاوز 100%.");
+
+            var requestedIds = shares.Select(s => s.AccountId).ToList();
+            if (requestedIds.Distinct().Count() != requestedIds.Count)
+                throw new InvalidOperationException("لا يمكن تكرار نفس الحساب المحاسبي الدافع ضمن المقايسة الواحدة.");
+
+            decimal totalPct = shares.Sum(s => s.SharePercentage);
+            if (Math.Abs(totalPct - 100m) > 0.01m)
+                throw new InvalidOperationException($"مجموع نسب الحسابات الدافعة يجب أن يساوي 100%. المجموع الحالي: {totalPct}%");
+
+            var existingCount = await _context.Accounts
+                .CountAsync(a => requestedIds.Contains(a.AccountId), ct);
+            if (existingCount != requestedIds.Count)
+                throw new InvalidOperationException("أحد الحسابات المحاسبية المحددة غير موجود أو معطل.");
+
+            foreach (var share in shares)
+            {
+                moqaysa.AccountShares.Add(new MoqaysaAccountShare
+                {
+                    AccountId = share.AccountId,
+                    SharePercentage = share.SharePercentage,
+                    AllocatedAmount = MoqaysaCalculationService.Round2(moqaysa.FinalGrandTotal * (share.SharePercentage / 100m))
+                });
+            }
+        }
+        else if (defaultAccountId > 0)
+        {
+            moqaysa.AccountShares.Add(new MoqaysaAccountShare
+            {
+                AccountId = defaultAccountId,
+                SharePercentage = 100.00m,
+                AllocatedAmount = moqaysa.FinalGrandTotal
+            });
+        }
     }
 
     public async Task<bool> ToggleActiveAsync(int id, CancellationToken ct = default)
@@ -467,6 +616,7 @@ public class MoqaysaService : IMoqaysaService
             RequiredQuantityText = m.RequiredQuantityText,
             SpecificationsText = m.SpecificationsText,
             RawMaterials = m.RawMaterials,
+            MaterialProcessingPercent = m.SelectedMaterialProcessingPercent,
             MaterialProcessingFee = m.MaterialProcessingFee,
             FilmsProcessingFee = m.FilmsProcessingFee,
             TotalMaterials = m.TotalMaterials,
@@ -474,19 +624,24 @@ public class MoqaysaService : IMoqaysaService
             TotalMachineCosts = m.TotalMachineCosts,
             SubTotal1 = m.SubTotal1,
             ApplyAdminExpenses = m.ApplyAdminExpenses,
+            AdminExpensesPercent = m.SelectedAdminExpensesPercent,
             AdminExpenses = m.AdminExpenses,
             TotalExpenses = m.TotalExpenses,
             ApplyMarkup = m.ApplyMarkup,
             SelectedMarkupPercent = m.SelectedMarkupPercent,
             MarkupAmount = m.MarkupAmount,
             TotalAfterMarkup = m.TotalAfterMarkup,
+            MinistryOfFinancePercent = m.SelectedMinistryOfFinancePercent,
             MinistryOfFinanceFee = m.MinistryOfFinanceFee,
+            WorkersFundPercent = m.SelectedWorkersFundPercent,
             WorkersSyndicateFund = m.WorkersSyndicateFund,
             SubTotal2 = m.SubTotal2,
             ApplyOther = m.ApplyOther,
+            OtherPercent = m.SelectedOtherPercent,
             OtherAmount = m.OtherAmount,
             SubTotal3 = m.SubTotal3,
             ApplyVat = m.ApplyVat,
+            VatPercent = m.SelectedVatPercent,
             VatAmount = m.VatAmount,
             FinalGrandTotal = m.FinalGrandTotal,
             ParsedQuantity = parsedQuantity,
@@ -518,6 +673,18 @@ public class MoqaysaService : IMoqaysaService
                 TotalWorkerWages = mac.TotalWorkerWages,
                 MachineHourlyRateSnapshot = mac.MachineHourlyRateSnapshot,
                 TotalMachineOperatingCost = mac.TotalMachineOperatingCost
+            }).ToList(),
+            AccountShares = m.AccountShares.Select(s => new MoqaysaAccountShareViewModel
+            {
+                ShareId = s.ShareId,
+                AccountId = s.AccountId,
+                AccountNameAr = s.Account?.AccountNameAr ?? string.Empty,
+                DebitHeaderTextAr = s.Account?.DebitHeaderTextAr ?? string.Empty,
+                SharePercentage = s.SharePercentage,
+                AllocatedAmount = s.AllocatedAmount,
+                IsIncludedInTasweya = s.IsIncludedInTasweya,
+                IsPaid = s.IsPaid,
+                PaidAtUtc = s.PaidAtUtc
             }).ToList()
         };
     }

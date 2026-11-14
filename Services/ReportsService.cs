@@ -21,15 +21,15 @@ public class ReportsService : IReportsService
 
     public async Task<List<AccountSummaryViewModel>> GetAccountsSummaryAsync(CancellationToken ct = default)
     {
-        var moqaysatAgg = await _context.Moqaysat
-            .Where(m => m.IsActive && m.Customer != null)
-            .GroupBy(m => m.Customer!.AccountId)
+        var moqaysatAgg = await _context.MoqaysaAccountShares
+            .Where(s => s.Moqaysa != null && s.Moqaysa.IsActive)
+            .GroupBy(s => s.AccountId)
             .Select(g => new
             {
                 AccountId = g.Key,
-                TotalBilled = g.Sum(m => m.FinalGrandTotal),
-                UnsettledMoqaysat = g.Sum(m => !m.IsIncludedInTasweya ? m.FinalGrandTotal : 0m),
-                MoqaysatCount = g.Count()
+                TotalBilled = g.Sum(s => s.AllocatedAmount),
+                UnsettledMoqaysat = g.Sum(s => !s.IsIncludedInTasweya ? s.AllocatedAmount : 0m),
+                MoqaysatCount = g.Select(s => s.MoqaysaId).Distinct().Count()
             })
             .ToListAsync(ct);
 

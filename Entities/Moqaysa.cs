@@ -126,4 +126,5 @@ public class Moqaysa
     public virtual ICollection<MoqaysaMaterialItem> MaterialItems { get; set; } = new List<MoqaysaMaterialItem>();
     public virtual ICollection<MoqaysaMachineryItem> MachineryItems { get; set; } = new List<MoqaysaMachineryItem>();
     public virtual ICollection<TasweyaMoqaysaLink> TasweyaLinks { get; set; } = new List<TasweyaMoqaysaLink>();
+    public virtual ICollection<MoqaysaAccountShare> AccountShares { get; set; } = new List<MoqaysaAccountShare>();
 }

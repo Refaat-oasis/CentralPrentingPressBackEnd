@@ -588,6 +588,45 @@ namespace CentralPress.API.Migrations
                     b.ToTable("Moqaysat");
                 });
 
+            modelBuilder.Entity("CentralPress.API.Entities.MoqaysaAccountShare", b =>
+                {
+                    b.Property<int>("ShareId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("ShareId"));
+
+                    b.Property<int>("AccountId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("AllocatedAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<bool>("IsIncludedInTasweya")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsPaid")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("MoqaysaId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("PaidAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<decimal>("SharePercentage")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.HasKey("ShareId");
+
+                    b.HasIndex("AccountId");
+
+                    b.HasIndex("MoqaysaId", "AccountId")
+                        .IsUnique();
+
+                    b.ToTable("MoqaysaAccountShares");
+                });
+
             modelBuilder.Entity("CentralPress.API.Entities.MoqaysaMachineryItem", b =>
                 {
                     b.Property<int>("OperationId")
@@ -1033,8 +1072,7 @@ namespace CentralPress.API.Migrations
                     b.HasIndex("CustomerId");
 
                     b.HasIndex("SettlementNumber")
-                        .IsUnique()
-                        .HasDatabaseName("IX_Tasweyat_SettlementNumber_Unique");
+                        .HasDatabaseName("IX_Tasweyat_SettlementNumber");
 
                     b.ToTable("Tasweyat");
                 });
@@ -1266,6 +1304,25 @@ namespace CentralPress.API.Migrations
                         .IsRequired();
 
                     b.Navigation("Customer");
+                });
+
+            modelBuilder.Entity("CentralPress.API.Entities.MoqaysaAccountShare", b =>
+                {
+                    b.HasOne("CentralPress.API.Entities.AccountEntity", "Account")
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("CentralPress.API.Entities.Moqaysa", "Moqaysa")
+                        .WithMany("AccountShares")
+                        .HasForeignKey("MoqaysaId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Account");
+
+                    b.Navigation("Moqaysa");
                 });
 
             modelBuilder.Entity("CentralPress.API.Entities.MoqaysaMachineryItem", b =>
@@ -1514,6 +1571,8 @@ namespace CentralPress.API.Migrations
 
             modelBuilder.Entity("CentralPress.API.Entities.Moqaysa", b =>
                 {
+                    b.Navigation("AccountShares");
+
                     b.Navigation("MachineryItems");
 
                     b.Navigation("MaterialItems");

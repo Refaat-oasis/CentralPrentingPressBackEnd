@@ -17,5 +17,5 @@ public interface IAuthService
     Task<(bool Succeeded, string Message)> ResetPasswordAsync(ResetPasswordDto dto, string? ipAddress, CancellationToken cancellationToken = default);
     Task<object?> GetCurrentUserAsync(string? userId, string? email, bool isSuperAdmin, CancellationToken cancellationToken = default);
     Task LogoutAsync(string? userId, CancellationToken cancellationToken = default);
-    Task TerminateSessionAsync(string? token, CancellationToken cancellationToken = default);
+    Task TerminateSessionAsync(string? userId, string? sessionId, CancellationToken cancellationToken = default);
 }

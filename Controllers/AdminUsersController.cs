@@ -6,6 +6,7 @@ using CentralPress.API.Filters;
 using CentralPress.API.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 
 namespace CentralPress.API.Controllers;
 
@@ -16,10 +17,12 @@ namespace CentralPress.API.Controllers;
 public class AdminUsersController : ControllerBase
 {
     private readonly IAdminUserService _adminUserService;
+    private readonly IEmailService _emailService;
 
-    public AdminUsersController(IAdminUserService adminUserService)
+    public AdminUsersController(IAdminUserService adminUserService, IEmailService emailService)
     {
         _adminUserService = adminUserService;
+        _emailService = emailService;
     }
 
     [HttpGet]
@@ -101,6 +104,25 @@ public class AdminUsersController : ControllerBase
         var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
         var (succeeded, message) = await _adminUserService.DeleteEmployeeAsync(id, currentUserId, cancellationToken);
         if (!succeeded)
+            return BadRequest(new { message });
+
+        return Ok(new { message });
+    }
+
+    [HttpPost("test-smtp")]
+    [Authorize(Roles = "SuperAdmin,Admin")]
+    [PermissionAuthorize("EMPLOYEES", "CanAccess")]
+    public async Task<IActionResult> TestSmtp([FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] TestSmtpRequestDto? dto = null)
+    {
+        var recipient = !string.IsNullOrWhiteSpace(dto?.RecipientEmail)
+            ? dto.RecipientEmail.Trim()
+            : User.FindFirstValue(ClaimTypes.Email);
+
+        if (string.IsNullOrWhiteSpace(recipient))
+            return BadRequest(new { message = "يرجى تحديد بريد إلكتروني صالح لإرسال اختبار SMTP" });
+
+        var (success, message, _) = await _emailService.TestSmtpConnectionAsync(recipient);
+        if (!success)
             return BadRequest(new { message });
 
         return Ok(new { message });

@@ -1,5 +1,8 @@
 using System;
+using System.Linq;
+using System.Net;
 using System.Text;
+using System.Threading.RateLimiting;
 using System.Threading.Tasks;
 using CentralPress.API.Common;
 using CentralPress.API.Data;
@@ -8,7 +11,11 @@ using CentralPress.API.Filters;
 using CentralPress.API.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -19,11 +26,33 @@ using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// 1. Database Connection
-if (builder.Configuration["UseInMemoryDatabase"] != "true")
+builder.WebHost.ConfigureKestrel(options =>
 {
-    var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-        ?? "Server=localhost;Database=AssiutCentralPressDb;Trusted_Connection=True;MultipleActiveResultSets=true;TrustServerCertificate=True;";
+    options.AddServerHeader = false;
+});
+
+bool isProdLike = !builder.Environment.IsDevelopment();
+bool requireHttps = builder.Configuration.GetValue<bool>("Security:RequireHttps", isProdLike);
+
+// 1. Database Connection
+if (builder.Configuration["UseInMemoryDatabase"] == "true")
+{
+    if (isProdLike)
+    {
+        throw new InvalidOperationException("UseInMemoryDatabase=true is strictly prohibited outside Development.");
+    }
+}
+else
+{
+    var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+    if (string.IsNullOrWhiteSpace(connectionString))
+    {
+        if (isProdLike)
+        {
+            throw new InvalidOperationException("ConnectionStrings:DefaultConnection must be configured in Production.");
+        }
+        connectionString = "Server=localhost;Database=AssiutCentralPressDb;Trusted_Connection=True;MultipleActiveResultSets=true;TrustServerCertificate=True;";
+    }
 
     builder.Services.AddDbContext<ApplicationDbContext>(options =>
         options.UseSqlServer(connectionString, sqlOptions =>
@@ -32,7 +61,7 @@ if (builder.Configuration["UseInMemoryDatabase"] != "true")
         }));
 }
 
-// 2. Identity Configuration with Enterprise Password Complexity (MED-04)
+// 2. Identity Configuration with Enterprise Password Complexity & Lockout
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 {
     options.Password.RequireDigit = true;
@@ -41,15 +70,28 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
     options.Password.RequireNonAlphanumeric = false;
     options.Password.RequiredLength = 8;
     options.User.RequireUniqueEmail = true;
+
+    options.Lockout.AllowedForNewUsers = true;
+    options.Lockout.MaxFailedAccessAttempts = 5;
+    options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
 })
 .AddEntityFrameworkStores<ApplicationDbContext>()
 .AddDefaultTokenProviders();
 
-// 3. JWT Authentication (CRIT-01, HIGH-01)
+// 3. JWT Authentication
 var jwtKey = builder.Configuration["JwtSettings:SecurityKey"];
-if (string.IsNullOrWhiteSpace(jwtKey) || jwtKey.Length < 32)
+if (string.IsNullOrWhiteSpace(jwtKey) || jwtKey.Length < 32 ||
+    (isProdLike && (jwtKey.Contains("REPLACE_WITH", StringComparison.OrdinalIgnoreCase) || jwtKey.Contains("DEV_ONLY", StringComparison.OrdinalIgnoreCase))))
 {
-    throw new InvalidOperationException("JwtSettings:SecurityKey is not configured or is shorter than 32 characters.");
+    throw new InvalidOperationException("JwtSettings:SecurityKey is not configured securely (minimum 32 non-placeholder characters required).");
+}
+
+var superAdminSecret = builder.Configuration["SuperAdmin:MasterSecret"];
+if (isProdLike && (string.IsNullOrWhiteSpace(superAdminSecret) ||
+    superAdminSecret.Contains("REPLACE_WITH", StringComparison.OrdinalIgnoreCase) ||
+    superAdminSecret.Contains("DEV_ONLY", StringComparison.OrdinalIgnoreCase)))
+{
+    throw new InvalidOperationException("SuperAdmin:MasterSecret must be securely configured in Production.");
 }
 
 builder.Services.AddAuthentication(options =>
@@ -59,8 +101,8 @@ builder.Services.AddAuthentication(options =>
 })
 .AddJwtBearer(options =>
 {
-    options.RequireHttpsMetadata = false;
-    options.SaveToken = true;
+    options.RequireHttpsMetadata = requireHttps;
+    options.SaveToken = false;
     options.TokenValidationParameters = new TokenValidationParameters
     {
         ValidateIssuerSigningKey = true,
@@ -69,19 +111,8 @@ builder.Services.AddAuthentication(options =>
         ValidIssuer = builder.Configuration["JwtSettings:Issuer"] ?? "CentralPressAPI",
         ValidateAudience = true,
         ValidAudience = builder.Configuration["JwtSettings:Audience"] ?? "CentralPressClient",
-        ClockSkew = TimeSpan.FromMinutes(5)
-    };
-    options.Events = new JwtBearerEvents
-    {
-        OnMessageReceived = context =>
-        {
-            var accessToken = context.Request.Query["token"];
-            if (!string.IsNullOrEmpty(accessToken))
-            {
-                context.Token = accessToken;
-            }
-            return Task.CompletedTask;
-        }
+        ValidateLifetime = true,
+        ClockSkew = TimeSpan.FromMinutes(1)
     };
 });
 
@@ -152,16 +183,69 @@ builder.Services.AddControllers(options =>
     options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
 });
 
-// 7. CORS Policy
+// 7. Strict CORS Policy, Rate Limiting, ForwardedHeaders & HealthChecks
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()?
+    .Where(o => !string.IsNullOrWhiteSpace(o))
+    .Select(o => o.Trim().TrimEnd('/'))
+    .Distinct(StringComparer.OrdinalIgnoreCase)
+    .ToArray() ?? Array.Empty<string>();
+
+if (isProdLike && allowedOrigins.Length == 0)
+{
+    throw new InvalidOperationException("Cors:AllowedOrigins must specify at least one allowed origin in Production.");
+}
+
+if (allowedOrigins.Length == 0)
+{
+    allowedOrigins = new[] { "http://localhost:5173", "https://localhost:5173" };
+}
+
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAll", policy =>
+    options.AddPolicy("AllowedOriginsPolicy", policy =>
     {
-        policy.AllowAnyOrigin()
+        policy.WithOrigins(allowedOrigins)
               .AllowAnyHeader()
-              .AllowAnyMethod();
+              .AllowAnyMethod()
+              .AllowCredentials();
     });
 });
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = async (ctx, ct) =>
+    {
+        ctx.HttpContext.Response.ContentType = "application/json; charset=utf-8";
+        await ctx.HttpContext.Response.WriteAsJsonAsync(new
+        {
+            message = "تم تجاوز الحد المسموح من المحاولات. يرجى الانتظار دقيقة ثم إعادة المحاولة."
+        }, ct);
+    };
+
+    options.AddPolicy("AuthRateLimit", httpContext =>
+    {
+        var ip = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: ip,
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            });
+    });
+});
+
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
+builder.Services.AddHealthChecks();
 
 // 8. Swagger / OpenAPI
 builder.Services.AddEndpointsApiExplorer();
@@ -211,17 +295,67 @@ using (var scope = app.Services.CreateScope())
         var db = services.GetRequiredService<ApplicationDbContext>();
         var userMgr = services.GetRequiredService<UserManager<ApplicationUser>>();
         var roleMgr = services.GetRequiredService<RoleManager<IdentityRole>>();
-        await DbInitializer.InitializeAsync(db, userMgr, roleMgr);
+        await DbInitializer.InitializeAsync(db, userMgr, roleMgr, builder.Configuration, app.Environment, logger);
     }
     catch (Exception ex)
     {
         logger.LogError(ex, "[!] خطأ أثناء تهيئة قاعدة البيانات: {Message}", ex.Message);
+        if (!app.Environment.IsDevelopment())
+        {
+            throw;
+        }
     }
 }
 
-app.UseCors("AllowAll");
+app.UseForwardedHeaders();
 
-if (app.Environment.IsDevelopment() || true)
+app.UseExceptionHandler(errorApp =>
+{
+    errorApp.Run(async context =>
+    {
+        var feature = context.Features.Get<IExceptionHandlerFeature>();
+        var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
+        if (feature?.Error != null)
+        {
+            logger.LogError(feature.Error, "Unhandled server exception for {Path} (TraceId: {TraceId})",
+                context.Request.Path, context.TraceIdentifier);
+        }
+
+        context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+        context.Response.ContentType = "application/json; charset=utf-8";
+        await context.Response.WriteAsJsonAsync(new
+        {
+            message = "حدث خطأ داخلي في الخادم. يرجى المحاولة مجدداً أو إبلاغ الدعم الفني.",
+            traceId = context.TraceIdentifier
+        });
+    });
+});
+
+if (!app.Environment.IsDevelopment() && requireHttps)
+{
+    app.UseHsts();
+    app.UseHttpsRedirection();
+}
+
+app.Use(async (context, next) =>
+{
+    context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+    context.Response.Headers["X-Frame-Options"] = "DENY";
+    context.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
+    context.Response.Headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()";
+
+    if (context.Request.Path.StartsWithSegments("/api/auth", StringComparison.OrdinalIgnoreCase))
+    {
+        context.Response.Headers["Cache-Control"] = "no-store, no-cache";
+        context.Response.Headers["Pragma"] = "no-cache";
+    }
+
+    await next();
+});
+
+app.UseCors("AllowedOriginsPolicy");
+
+if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI(c =>
@@ -230,10 +364,13 @@ if (app.Environment.IsDevelopment() || true)
     });
 }
 
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseMiddleware<CentralPress.API.Middleware.UserSessionValidationMiddleware>();
 app.UseAuthorization();
 
+app.MapHealthChecks("/health");
+app.MapHealthChecks("/api/health");
 app.MapControllers();
 
 app.Run();
