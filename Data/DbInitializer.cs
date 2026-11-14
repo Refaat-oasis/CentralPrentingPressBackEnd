@@ -287,9 +287,16 @@ public static class DbInitializer
         var existingAdmin = await userManager.FindByEmailAsync(adminEmail);
         if (existingAdmin == null)
         {
-            var configuredSeedPassword = configuration?["Seed:AdminInitialPassword"];
+            var configuredSeedPassword = configuration?["Seed:AdminInitialPassword"]?.Trim();
+            if (!string.IsNullOrWhiteSpace(configuredSeedPassword) &&
+                configuredSeedPassword.Contains("REPLACE_", StringComparison.OrdinalIgnoreCase))
+            {
+                logger?.LogWarning("Seed:AdminInitialPassword contains a template placeholder value; ignoring placeholder.");
+                configuredSeedPassword = null;
+            }
+
             string? initialPassword = !string.IsNullOrWhiteSpace(configuredSeedPassword)
-                ? configuredSeedPassword.Trim()
+                ? configuredSeedPassword
                 : (environment == null || environment.IsDevelopment() ? "Admin@12345" : null);
 
             if (string.IsNullOrWhiteSpace(initialPassword))
