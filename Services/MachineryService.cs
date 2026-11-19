@@ -22,7 +22,7 @@ public class MachineryService : IMachineryService
 
     public async Task<List<MachineryViewModel>> GetAllAsync(bool activeOnly = false, CancellationToken ct = default)
     {
-        var query = _context.Machineries.AsQueryable();
+        var query = _context.Machineries.IgnoreQueryFilters().AsQueryable();
         if (activeOnly)
             query = query.Where(m => m.IsActive);
 
@@ -36,7 +36,9 @@ public class MachineryService : IMachineryService
 
     public async Task<MachineryViewModel?> GetByIdAsync(int id, CancellationToken ct = default)
     {
-        var item = await _context.Machineries.FindAsync(new object[] { id }, ct);
+        var item = await _context.Machineries
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(m => m.MachineryId == id, ct);
         return item == null ? null : MapToViewModel(item);
     }
 
@@ -79,7 +81,9 @@ public class MachineryService : IMachineryService
     public async Task<MachineryViewModel?> UpdateAsync(int id, MachineryDto dto, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(dto);
-        var item = await _context.Machineries.FindAsync(new object[] { id }, ct);
+        var item = await _context.Machineries
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(m => m.MachineryId == id, ct);
         if (item == null) return null;
 
         if (string.IsNullOrWhiteSpace(dto.MachineryNameAr))
@@ -110,7 +114,9 @@ public class MachineryService : IMachineryService
     public async Task<MachineryViewModel?> UpdateMaintenanceStatusAsync(int id, UpdateMachineryMaintenanceDto dto, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(dto);
-        var item = await _context.Machineries.FindAsync(new object[] { id }, ct);
+        var item = await _context.Machineries
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(m => m.MachineryId == id, ct);
         if (item == null) return null;
 
         if (string.IsNullOrWhiteSpace(dto.MaintenanceStatus))
@@ -126,7 +132,9 @@ public class MachineryService : IMachineryService
 
     public async Task<bool> ToggleActiveAsync(int id, CancellationToken ct = default)
     {
-        var item = await _context.Machineries.FindAsync(new object[] { id }, ct);
+        var item = await _context.Machineries
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(m => m.MachineryId == id, ct);
         if (item == null) return false;
 
         item.IsActive = !item.IsActive;

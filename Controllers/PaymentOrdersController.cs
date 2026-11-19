@@ -30,9 +30,10 @@ public class PaymentOrdersController : ControllerBase
     public async Task<ActionResult<List<UnpaidTasweyaViewModel>>> GetUnpaidTasweyat(
         [FromQuery] int? accountId,
         [FromQuery] int? customerId,
-        CancellationToken ct)
+        [FromQuery] int? includePaymentOrderId = null,
+        CancellationToken ct = default)
     {
-        var list = await _paymentOrderService.GetUnpaidTasweyatAsync(accountId, customerId, ct);
+        var list = await _paymentOrderService.GetUnpaidTasweyatAsync(accountId, customerId, includePaymentOrderId, ct);
         return Ok(list);
     }
 

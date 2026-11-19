@@ -25,6 +25,7 @@ public class CustomerService : ICustomerService
     public async Task<List<CustomerViewModel>> GetAllCustomersAsync(bool activeOnly = false, CancellationToken ct = default)
     {
         var query = _context.Customers
+            .IgnoreQueryFilters()
             .Include(c => c.Account)
             .AsQueryable();
 
@@ -41,6 +42,7 @@ public class CustomerService : ICustomerService
     public async Task<CustomerViewModel?> GetCustomerByIdAsync(int id, CancellationToken ct = default)
     {
         var customer = await _context.Customers
+            .IgnoreQueryFilters()
             .Include(c => c.Account)
             .FirstOrDefaultAsync(c => c.CustomerId == id, ct);
 
@@ -79,15 +81,17 @@ public class CustomerService : ICustomerService
     public async Task<CustomerViewModel?> UpdateCustomerAsync(int id, CustomerDto dto, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(dto);
-        var customer = await _context.Customers.FindAsync(new object[] { id }, ct);
+        var customer = await _context.Customers
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(c => c.CustomerId == id, ct);
         if (customer == null) return null;
 
         if (string.IsNullOrWhiteSpace(dto.CustomerNameAr))
             throw new ArgumentException("يرجى كتابة اسم الجهة الطالبة / العميل", nameof(dto.CustomerNameAr));
 
-        var accountExists = await _context.Accounts.AnyAsync(a => a.AccountId == dto.AccountId, ct);
+        var accountExists = await _context.Accounts.AnyAsync(a => a.AccountId == dto.AccountId && a.IsActive, ct);
         if (!accountExists)
-            throw new InvalidOperationException("الحساب المختار غير صحيح أو غير موجود");
+            throw new InvalidOperationException("الحساب المختار غير صحيح أو معطل");
 
         customer.CustomerNameAr = dto.CustomerNameAr.Trim();
         customer.AccountId = dto.AccountId;
@@ -104,7 +108,9 @@ public class CustomerService : ICustomerService
 
     public async Task<bool> ToggleCustomerActiveAsync(int id, CancellationToken ct = default)
     {
-        var customer = await _context.Customers.FindAsync(new object[] { id }, ct);
+        var customer = await _context.Customers
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(c => c.CustomerId == id, ct);
         if (customer == null) return false;
 
         customer.IsActive = !customer.IsActive;
@@ -114,7 +120,7 @@ public class CustomerService : ICustomerService
 
     public async Task<List<AccountViewModel>> GetAllAccountsAsync(bool activeOnly = false, CancellationToken ct = default)
     {
-        var query = _context.Accounts.AsQueryable();
+        var query = _context.Accounts.IgnoreQueryFilters().AsQueryable();
         if (activeOnly)
             query = query.Where(a => a.IsActive);
 
@@ -127,7 +133,9 @@ public class CustomerService : ICustomerService
 
     public async Task<AccountViewModel?> GetAccountByIdAsync(int id, CancellationToken ct = default)
     {
-        var account = await _context.Accounts.FindAsync(new object[] { id }, ct);
+        var account = await _context.Accounts
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(a => a.AccountId == id, ct);
         return account == null ? null : MapToAccountViewModel(account);
     }
 
@@ -209,7 +217,9 @@ public class CustomerService : ICustomerService
     public async Task<AccountViewModel?> UpdateAccountAsync(int id, AccountSaveDto dto, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(dto);
-        var account = await _context.Accounts.FindAsync(new object[] { id }, ct);
+        var account = await _context.Accounts
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(a => a.AccountId == id, ct);
         if (account == null) return null;
 
         if (string.IsNullOrWhiteSpace(dto.AccountNameAr))
@@ -243,7 +253,9 @@ public class CustomerService : ICustomerService
 
     public async Task<bool> ToggleAccountActiveAsync(int id, CancellationToken ct = default)
     {
-        var account = await _context.Accounts.FindAsync(new object[] { id }, ct);
+        var account = await _context.Accounts
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(a => a.AccountId == id, ct);
         if (account == null) return false;
 
         account.IsActive = !account.IsActive;

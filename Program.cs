@@ -173,6 +173,14 @@ builder.Services.AddScoped<ITasweyaService, TasweyaService>();
 builder.Services.AddScoped<IPaymentOrderService, PaymentOrderService>();
 builder.Services.AddScoped<IReportsService, ReportsService>();
 
+// Documents Printing Engine (PLAN.md - Single Source of Truth)
+builder.Services.Configure<CentralPress.API.Documents.DocumentOptions>(builder.Configuration.GetSection(CentralPress.API.Documents.DocumentOptions.Section));
+builder.Services.AddSingleton<CentralPress.API.Documents.DocxTemplateFiller>();
+builder.Services.AddSingleton<CentralPress.API.Documents.PdfConverter>();
+builder.Services.AddScoped<CentralPress.API.Documents.IAmountInWords, CentralPress.API.Documents.TafqeetAmountInWords>();
+builder.Services.AddScoped<CentralPress.API.Documents.IPrintDataSource, CentralPress.API.Documents.EfPrintDataSource>();
+builder.Services.AddScoped<CentralPress.API.Documents.DocumentService>();
+
 // 6. MVC & Sanitized Audit Logging Filter (CRIT-03)
 builder.Services.AddControllers(options =>
 {

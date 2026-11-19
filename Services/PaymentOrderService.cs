@@ -41,11 +41,17 @@ public class PaymentOrderService : IPaymentOrderService
     public async Task<List<UnpaidTasweyaViewModel>> GetUnpaidTasweyatAsync(
         int? accountId,
         int? customerId,
+        int? includePaymentOrderId = null,
         CancellationToken ct = default)
     {
-        var activePaymentOrderTasweyaIds = await _context.PaymentOrderTasweyaLinks
+        var activeLinksQuery = _context.PaymentOrderTasweyaLinks
             .AsNoTracking()
-            .Where(l => l.IsActive && l.PaymentOrder != null && l.PaymentOrder.IsActive)
+            .Where(l => l.IsActive && l.PaymentOrder != null && l.PaymentOrder.IsActive);
+
+        if (includePaymentOrderId.HasValue)
+            activeLinksQuery = activeLinksQuery.Where(l => l.PaymentOrderId != includePaymentOrderId.Value);
+
+        var activePaymentOrderTasweyaIds = await activeLinksQuery
             .Select(l => l.TasweyaId)
             .ToListAsync(ct);
 
@@ -53,34 +59,98 @@ public class PaymentOrderService : IPaymentOrderService
             .AsNoTracking()
             .Include(t => t.Account)
             .Include(t => t.Customer)
+            .Include(t => t.MoqaysaLinks)
+                .ThenInclude(ml => ml.Moqaysa)
+                    .ThenInclude(m => m!.AccountShares)
+                        .ThenInclude(s => s.Account)
             .Where(t => t.IsActive && !t.IsPaid && !activePaymentOrderTasweyaIds.Contains(t.TasweyaId));
 
         if (accountId.HasValue)
-            query = query.Where(t => t.AccountId == accountId.Value);
+        {
+            int targetAccountId = accountId.Value;
+            query = query.Where(t =>
+                t.AccountId == targetAccountId ||
+                t.MoqaysaLinks.Any(ml =>
+                    ml.Moqaysa != null &&
+                    ml.Moqaysa.AccountShares.Any(s => s.AccountId == targetAccountId)));
+        }
 
         if (customerId.HasValue)
             query = query.Where(t => t.CustomerId == customerId.Value);
 
-        return await query
+        var items = await query
             .OrderByDescending(t => t.TasweyaId)
-            .Select(t => new UnpaidTasweyaViewModel
+            .ToListAsync(ct);
+
+        var linkedMoqaysaIds = items
+            .SelectMany(t => t.MoqaysaLinks.Select(ml => ml.MoqaysaId))
+            .Distinct()
+            .ToList();
+
+        var moqaysaActiveLinkCounts = linkedMoqaysaIds.Count == 0
+            ? new Dictionary<int, int>()
+            : await _context.TasweyaMoqaysaLinks
+                .AsNoTracking()
+                .Where(l => linkedMoqaysaIds.Contains(l.MoqaysaId) && l.Tasweya != null && l.Tasweya.IsActive)
+                .GroupBy(l => l.MoqaysaId)
+                .Select(g => new { MoqaysaId = g.Key, DistinctTasweyat = g.Select(x => x.TasweyaId).Distinct().Count() })
+                .ToDictionaryAsync(x => x.MoqaysaId, x => x.DistinctTasweyat, ct);
+
+        return items.Select(t =>
+        {
+            var distinctMoqaysat = t.MoqaysaLinks
+                .Where(ml => ml.Moqaysa != null)
+                .Select(ml => ml.Moqaysa!)
+                .GroupBy(m => m.MoqaysaId)
+                .Select(g => g.First())
+                .ToList();
+
+            var shareAccounts = distinctMoqaysat
+                .SelectMany(m => m.AccountShares)
+                .GroupBy(s => s.AccountId)
+                .Select(g => g.First().Account?.AccountNameAr)
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Distinct()
+                .ToList();
+
+            bool isSharedAcrossMultipleTasweyat = distinctMoqaysat.Any(m =>
+                moqaysaActiveLinkCounts.TryGetValue(m.MoqaysaId, out int cnt) && cnt > 1);
+            decimal distinctMoqaysatFullSum = distinctMoqaysat.Sum(m => m.FinalGrandTotal);
+            bool isUnifiedMultiAccount = shareAccounts.Count > 1 &&
+                (!isSharedAcrossMultipleTasweyat || Math.Abs(t.SettlementGrandTotal - distinctMoqaysatFullSum) <= 1m);
+
+            string resolvedAccountName = isUnifiedMultiAccount
+                ? string.Join(" ، ", shareAccounts)
+                : (t.Account != null ? t.Account.AccountNameAr : "غير محدد");
+
+            return new UnpaidTasweyaViewModel
             {
                 TasweyaId = t.TasweyaId,
                 SettlementNumber = t.SettlementNumber,
                 SettlementDate = t.SettlementDate,
                 ClaimNumber = t.ClaimNumber,
                 AccountId = t.AccountId,
-                AccountNameAr = t.Account != null ? t.Account.AccountNameAr : "غير محدد",
+                AccountNameAr = resolvedAccountName,
                 CustomerId = t.CustomerId,
                 CustomerNameAr = t.Customer != null ? t.Customer.CustomerNameAr : "غير محدد",
                 JobOrderNumbersText = t.JobOrderNumbersText,
+                TotalMaterialsSum = t.TotalMaterialsSum,
+                TotalWorkerWagesSum = t.TotalWorkerWagesSum,
+                TotalMachineCostsSum = t.TotalMachineCostsSum,
+                AdminExpensesSum = t.AdminExpensesSum,
+                MarkupAmountSum = t.MarkupAmountSum,
+                MinistryOfFinanceSum = t.MinistryOfFinanceSum,
+                WorkersFundSum = t.WorkersFundSum,
+                OtherAmountSum = t.OtherAmountSum,
+                RevenuesTotal = t.RevenuesTotal,
+                VatTotal = t.VatTotal,
                 SettlementGrandTotal = t.SettlementGrandTotal,
                 TotalAmountInWordsAr = t.TotalAmountInWordsAr,
                 IsPaid = t.IsPaid,
                 IsActive = t.IsActive,
                 CreatedAtUtc = t.CreatedAtUtc
-            })
-            .ToListAsync(ct);
+            };
+        }).ToList();
     }
 
     public async Task<List<PaymentOrderSummaryViewModel>> GetAllAsync(
@@ -341,6 +411,7 @@ public class PaymentOrderService : IPaymentOrderService
 
         if (dto.ConfirmImmediately)
         {
+            var sharedMoqaysaIds = await GetMoqaysatWithOtherActiveTasweyaAsync(tasweyat, ct);
             foreach (var t in tasweyat)
             {
                 t.IsPaid = true;
@@ -350,7 +421,8 @@ public class PaymentOrderService : IPaymentOrderService
                 {
                     if (ml.Moqaysa != null)
                     {
-                        UpdateMoqaysaSharePaymentState(ml.Moqaysa, t.AccountId, isPaid: true, now);
+                        bool markAllShares = !sharedMoqaysaIds.Contains(ml.MoqaysaId);
+                        UpdateMoqaysaSharePaymentState(ml.Moqaysa, t.AccountId, markAllShares, isPaid: true, now);
                     }
                 }
             }
@@ -610,6 +682,12 @@ public class PaymentOrderService : IPaymentOrderService
         var oldStatus = paymentOrder.Status;
         var now = DateTime.UtcNow;
 
+        var linkedTasweyatToApprove = paymentOrder.TasweyaLinks
+            .Where(l => l.Tasweya != null)
+            .Select(l => l.Tasweya!)
+            .ToList();
+        var sharedMoqaysaIds = await GetMoqaysatWithOtherActiveTasweyaAsync(linkedTasweyatToApprove, ct);
+
         paymentOrder.Status = PaymentOrderStatus.Approved;
         paymentOrder.IsConfirmed = true;
         paymentOrder.ConfirmedAtUtc = now;
@@ -628,7 +706,8 @@ public class PaymentOrderService : IPaymentOrderService
                     {
                         if (ml.Moqaysa != null)
                         {
-                            UpdateMoqaysaSharePaymentState(ml.Moqaysa, link.Tasweya.AccountId, isPaid: true, now);
+                            bool markAllShares = !sharedMoqaysaIds.Contains(ml.MoqaysaId);
+                            UpdateMoqaysaSharePaymentState(ml.Moqaysa, link.Tasweya.AccountId, markAllShares, isPaid: true, now);
                         }
                     }
                 }
@@ -773,6 +852,12 @@ public class PaymentOrderService : IPaymentOrderService
         var oldStatus = paymentOrder.Status;
         var now = DateTime.UtcNow;
 
+        var linkedTasweyatToCancel = paymentOrder.TasweyaLinks
+            .Where(l => l.Tasweya != null)
+            .Select(l => l.Tasweya!)
+            .ToList();
+        var sharedMoqaysaIds = await GetMoqaysatWithOtherActiveTasweyaAsync(linkedTasweyatToCancel, ct);
+
         Action applyCancel = () =>
         {
             paymentOrder.Status = PaymentOrderStatus.Cancelled;
@@ -797,7 +882,8 @@ public class PaymentOrderService : IPaymentOrderService
                         {
                             if (ml.Moqaysa != null)
                             {
-                                UpdateMoqaysaSharePaymentState(ml.Moqaysa, link.Tasweya.AccountId, isPaid: false, timestampUtc: null);
+                                bool markAllShares = !sharedMoqaysaIds.Contains(ml.MoqaysaId);
+                                UpdateMoqaysaSharePaymentState(ml.Moqaysa, link.Tasweya.AccountId, markAllShares, isPaid: false, timestampUtc: null);
                             }
                         }
                     }
@@ -1182,17 +1268,56 @@ public class PaymentOrderService : IPaymentOrderService
         _ => "غير محدد"
     };
 
+    private async Task<HashSet<int>> GetMoqaysatWithOtherActiveTasweyaAsync(
+        IEnumerable<Tasweya> tasweyat,
+        CancellationToken ct)
+    {
+        var tasweyaList = tasweyat.ToList();
+        var tasweyaIds = tasweyaList.Select(t => t.TasweyaId).Where(id => id > 0).ToList();
+        var moqaysaIds = tasweyaList
+            .SelectMany(t => t.MoqaysaLinks.Select(ml => ml.MoqaysaId))
+            .Distinct()
+            .ToList();
+
+        if (moqaysaIds.Count == 0)
+            return new HashSet<int>();
+
+        var sharedIds = await _context.TasweyaMoqaysaLinks
+            .AsNoTracking()
+            .Where(l => moqaysaIds.Contains(l.MoqaysaId)
+                     && !tasweyaIds.Contains(l.TasweyaId)
+                     && l.Tasweya != null
+                     && l.Tasweya.IsActive)
+            .Select(l => l.MoqaysaId)
+            .Distinct()
+            .ToListAsync(ct);
+
+        return sharedIds.ToHashSet();
+    }
+
     private static void UpdateMoqaysaSharePaymentState(
         Moqaysa moqaysa,
         int accountId,
+        bool markAllShares,
         bool isPaid,
         DateTime? timestampUtc)
     {
-        var share = moqaysa.AccountShares.FirstOrDefault(s => s.AccountId == accountId);
-        if (share != null)
+        if (markAllShares)
         {
-            share.IsPaid = isPaid;
-            share.PaidAtUtc = isPaid ? timestampUtc : null;
+            foreach (var share in moqaysa.AccountShares)
+            {
+                share.IsPaid = isPaid;
+                share.PaidAtUtc = isPaid ? timestampUtc : null;
+            }
+        }
+        else
+        {
+            var share = moqaysa.AccountShares.FirstOrDefault(s => s.AccountId == accountId);
+            if (share != null)
+            {
+                share.IsPaid = isPaid;
+                share.PaidAtUtc = isPaid ? timestampUtc : null;
+            }
         }
 
         bool allSharesPaid = moqaysa.AccountShares.Count > 0

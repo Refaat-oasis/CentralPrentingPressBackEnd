@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Collections.Generic;
 using System.IO;
@@ -84,7 +84,8 @@ public class PdfExportService
             m.VatAmount);
 
         var materials = (m.MaterialItems ?? new List<MoqaysaMaterialItem>()).ToList();
-        var machineries = (m.MachineryItems ?? new List<MoqaysaMachineryItem>()).ToList();
+        var rawMachineries = (m.MachineryItems ?? new List<MoqaysaMachineryItem>()).ToList();
+        var machineries = NormalizeMachineryRows(rawMachineries);
 
         var document = Document.Create(container =>
         {
@@ -205,8 +206,8 @@ public class PdfExportService
                     {
                         table.Cell().Border(0.5f).Padding(1).AlignRight().Text(mat?.MaterialNameSnapshot ?? "").FontSize(7);
                         table.Cell().Border(0.5f).Padding(1).AlignCenter().Text(mat != null && mat.Quantity > 0 ? mat.Quantity.ToString("G") : "").FontSize(7);
-                        RenderPoundPiaster(table, mat?.UnitPrice ?? 0, showDashIfZero: true);
-                        RenderPoundPiaster(table, mat?.TotalPrice ?? 0, showDashIfZero: true);
+                        RenderPoundPiaster(table, mat?.UnitPrice ?? 0, blankIfZero: true);
+                        RenderPoundPiaster(table, mat?.TotalPrice ?? 0, blankIfZero: true);
                     }
 
                     // Row 0: أجور عمال Category Header
@@ -218,129 +219,110 @@ public class PdfExportService
                     RenderMaterialCells(mat0);
 
                     // Worker Wages Rows (Dynamic for all machines, minimum 11 to preserve form baseline)
-                    int macCount = Math.Max(11, machineries.Count);
+                    int macCount = Math.Max(11, machineries.Count); // blank form rows pad the baseline; names come only from the system
                     for (int i = 0; i < macCount; i++)
                     {
                         var mac = i < machineries.Count ? machineries[i] : null;
                         var mat = (i + 1) < materials.Count ? materials[i + 1] : null;
+                        bool hasWorker = mac != null && (mac.Hours > 0 || mac.TotalWorkerWages > 0);
 
-                        // Right: Worker wages
+                        // Right: Worker wages (Hours in Time, Rate in Hourly, Wages in جزئي, كلي left empty per Image 1)
                         table.Cell().Border(0.5f).Padding(1).AlignRight().Text(mac?.MachineryNameSnapshot ?? "").FontSize(7);
                         table.Cell().Border(0.5f).Padding(1).AlignCenter().Text(mac != null && mac.Hours > 0 ? mac.Hours.ToString("G") : "").FontSize(7);
-                        RenderPoundPiaster(table, mac?.WorkerHourlyRateSnapshot ?? 0, showDashIfZero: true);
-                        RenderPoundPiaster(table, mac?.TotalWorkerWages ?? 0, showDashIfZero: true);
-                        table.Cell().Border(0.5f).Padding(1).AlignCenter().Text("-").FontSize(7);
-                        table.Cell().Border(0.5f).Padding(1).AlignCenter().Text("-").FontSize(7);
+                        RenderPoundPiaster(table, hasWorker ? mac!.WorkerHourlyRateSnapshot : 0m, blankIfZero: true);
+                        RenderPoundPiaster(table, hasWorker ? mac!.TotalWorkerWages : 0m, blankIfZero: true);
+                        RenderEmptyCells(table, 2);
 
-                        // Left: Material
-                        if (i < 11 && mat != null)
-                        {
-                            RenderMaterialCells(mat);
-                        }
-                        else
-                        {
-                            table.Cell().ColumnSpan(6).Border(0.5f).Text("");
-                        }
+                        // Left: Material (always preserve 6-column vertical borders)
+                        RenderMaterialCells(mat);
                     }
 
-                    // Subtotal Worker Wages Row
+                    // Subtotal Worker Wages Row (placed in كلي per Image 1, Time & جزئي blank)
                     table.Cell().Border(0.5f).Background(Colors.Grey.Lighten4).Padding(1).AlignRight().Text("جملة أجور العمال").Bold();
-                    table.Cell().Border(0.5f).Background(Colors.Grey.Lighten4).Padding(1).AlignCenter().Text(machineries.Sum(x => x.Hours).ToString("G")).Bold();
-                    RenderEmptyCells(table, 4);
-                    RenderPoundPiaster(table, m.TotalWorkerWages, isBold: true);
+                    RenderEmptyCells(table, 5);
+                    RenderPoundPiaster(table, m.TotalWorkerWages, isBold: true, blankIfZero: m.TotalWorkerWages <= 0m);
 
-                    // Material 12
-                    var mat12 = 12 < materials.Count ? materials[12] : null;
-                    RenderMaterialCells(mat12);
+                    // Material row after worker subtotal (index 12 for 11 standard machines)
+                    int workerSubMatIdx = macCount + 1;
+                    var matWorkerSub = workerSubMatIdx < materials.Count ? materials[workerSubMatIdx] : null;
+                    RenderMaterialCells(matWorkerSub);
 
                     // Machine Operating Subheader: مصاريف الآلات
                     table.Cell().Border(0.5f).Background(Colors.Grey.Lighten5).Padding(1).AlignRight().Text("مصاريف الآلات :").Bold();
                     table.Cell().Border(0.5f).Padding(1).Text("");
                     RenderEmptyCells(table, 6);
 
-                    var mat13 = 13 < materials.Count ? materials[13] : null;
-                    RenderMaterialCells(mat13);
+                    int machHeaderMatIdx = macCount + 2;
+                    var matMachHeader = machHeaderMatIdx < materials.Count ? materials[machHeaderMatIdx] : null;
+                    RenderMaterialCells(matMachHeader);
 
                     // Machine Operating Rows (Dynamic for all machines, minimum 11)
+                    int maxMainMaterialsCount = macCount * 2 + 2;
                     for (int i = 0; i < macCount; i++)
                     {
                         var mac = i < machineries.Count ? machineries[i] : null;
-                        var mat = (i + 14) < materials.Count ? materials[i + 14] : null;
+                        int matIdx = macCount + 3 + i;
+                        var mat = matIdx < materials.Count ? materials[matIdx] : null;
 
-                        // Right: Machine Operating
+                        // Right: Machine Operating (Hours in Time, Rate in Hourly, Cost in جزئي, كلي left empty per Image 1)
                         decimal mHours = mac != null ? (mac.MachineHours > 0 ? mac.MachineHours : mac.Hours) : 0m;
+                        bool hasMachine = mac != null && (mHours > 0 || mac.TotalMachineOperatingCost > 0);
                         table.Cell().Border(0.5f).Padding(1).AlignRight().Text(mac?.MachineryNameSnapshot ?? "").FontSize(7);
                         table.Cell().Border(0.5f).Padding(1).AlignCenter().Text(mHours > 0 ? mHours.ToString("G") : "").FontSize(7);
-                        RenderPoundPiaster(table, mac?.MachineHourlyRateSnapshot ?? 0, showDashIfZero: true);
-                        RenderPoundPiaster(table, mac?.TotalMachineOperatingCost ?? 0, showDashIfZero: true);
-                        table.Cell().Border(0.5f).Padding(1).AlignCenter().Text("-").FontSize(7);
-                        table.Cell().Border(0.5f).Padding(1).AlignCenter().Text("-").FontSize(7);
+                        RenderPoundPiaster(table, hasMachine ? mac!.MachineHourlyRateSnapshot : 0m, blankIfZero: true);
+                        RenderPoundPiaster(table, hasMachine ? mac!.TotalMachineOperatingCost : 0m, blankIfZero: true);
+                        RenderEmptyCells(table, 2);
 
-                        // Left: Material
-                        if (i < 10 && mat != null)
+                        // Left: Material (overflow notice only on final row when > 24 materials; otherwise 6-col grid)
+                        if (i == macCount - 1 && materials.Count > Math.Max(24, maxMainMaterialsCount))
                         {
-                            RenderMaterialCells(mat);
+                            table.Cell().ColumnSpan(6).Border(0.5f).Background(Colors.Grey.Lighten4).Padding(1).AlignCenter()
+                                .Text($"يوجد {materials.Count - maxMainMaterialsCount} خامة إضافية مبيّنة بالملحق (ص 2)").Bold().FontSize(7);
                         }
                         else
                         {
-                            if (materials.Count > 24)
-                            {
-                                // Indicate overflow to annex page
-                                table.Cell().ColumnSpan(6).Border(0.5f).Background(Colors.Grey.Lighten4).Padding(1).AlignCenter()
-                                    .Text($"يوجد {materials.Count - 23} خامة إضافية مبيّنة بالملحق (ص 2)").Bold().FontSize(7);
-                            }
-                            else
-                            {
-                                // Blank cutout on material row 24
-                                table.Cell().ColumnSpan(6).Border(0.5f).Text("");
-                            }
+                            RenderMaterialCells(mat);
                         }
                     }
 
                     // Subtotal Machine Costs Row
-                    // Right: جملة م . الآلات
+                    // Right: جملة م . الآلات (in كلي per Image 1, Time & جزئي blank)
                     table.Cell().Border(0.5f).Background(Colors.Grey.Lighten4).Padding(1).AlignRight().Text("جملة م . الآلات").Bold();
-                    table.Cell().Border(0.5f).Background(Colors.Grey.Lighten4).Padding(1).AlignCenter().Text(machineries.Sum(x => x.MachineHours > 0 ? x.MachineHours : x.Hours).ToString("G")).Bold();
-                    RenderEmptyCells(table, 4);
-                    RenderPoundPiaster(table, m.TotalMachineCosts, isBold: true);
+                    RenderEmptyCells(table, 5);
+                    RenderPoundPiaster(table, m.TotalMachineCosts, isBold: true, blankIfZero: m.TotalMachineCosts <= 0m);
 
                     // Left: Materials Box Row 1: الجملة :
                     table.Cell().ColumnSpan(2).Border(0.5f).Background(Colors.Grey.Lighten5).Padding(1).AlignRight().Text("الجملة :").Bold();
                     RenderEmptyCells(table, 2);
-                    RenderPoundPiaster(table, m.RawMaterials, isBold: true);
+                    RenderPoundPiaster(table, m.RawMaterials, isBold: true, blankIfZero: m.RawMaterials <= 0m);
 
                     // Financial Cascade 1: الخامات
-                    // Right: الخامات
+                    // Right: الخامات (in جزئي per Image 1)
                     table.Cell().Border(0.5f).Padding(1).AlignRight().Text("الخامات :").Bold();
-                    table.Cell().Border(0.5f).Padding(1).Text("");
-                    RenderEmptyCells(table, 2);
-                    RenderPoundPiaster(table, m.RawMaterials);
+                    RenderEmptyCells(table, 3);
+                    RenderPoundPiaster(table, m.RawMaterials, blankIfZero: m.RawMaterials <= 0m);
                     RenderEmptyCells(table, 2);
 
                     // Left: Materials Box Row 2: المرتجع :
                     table.Cell().ColumnSpan(2).Border(0.5f).Background(Colors.Grey.Lighten5).Padding(1).AlignRight().Text("المرتجع :").Bold();
                     RenderEmptyCells(table, 2);
-                    RenderPoundPiaster(table, 0, showDashIfZero: true);
-
-                    // Financial Cascade 2: م. تشغيل الخامات
-                    // Right: م. تشغيل الخامات
-                    table.Cell().Border(0.5f).Padding(1).AlignRight().Text("م. تشغيل الخامات").Bold();
-                    table.Cell().Border(0.5f).Padding(1).Text("");
                     RenderEmptyCells(table, 2);
-                    RenderPoundPiaster(table, m.MaterialProcessingFee);
+
+                    // Financial Cascade 2: م. تشغيل الخامات (in جزئي per Image 1)
+                    table.Cell().Border(0.5f).Padding(1).AlignRight().Text("م. تشغيل الخامات").Bold();
+                    RenderEmptyCells(table, 3);
+                    RenderPoundPiaster(table, m.MaterialProcessingFee, blankIfZero: m.MaterialProcessingFee <= 0m);
                     RenderEmptyCells(table, 2);
 
                     // Left: Materials Box Row 3: صافي الجملة :
                     table.Cell().ColumnSpan(2).Border(0.5f).Background(Colors.Grey.Lighten4).Padding(1).AlignRight().Text("صافي الجملة :").Bold();
                     RenderEmptyCells(table, 2);
-                    RenderPoundPiaster(table, m.RawMaterials, isBold: true);
+                    RenderPoundPiaster(table, m.RawMaterials, isBold: true, blankIfZero: m.RawMaterials <= 0m);
 
-                    // Financial Cascade 3: م. تشغيل الأفلام
-                    // Right: م. تشغيل الأفلام
+                    // Financial Cascade 3: م. تشغيل الأفلام (in جزئي per Image 1)
                     table.Cell().Border(0.5f).Padding(1).AlignRight().Text("م. تشغيل الأفلام").Bold();
-                    table.Cell().Border(0.5f).Padding(1).Text("");
-                    RenderEmptyCells(table, 2);
-                    RenderPoundPiaster(table, m.FilmsProcessingFee, showDashIfZero: true);
+                    RenderEmptyCells(table, 3);
+                    RenderPoundPiaster(table, m.FilmsProcessingFee, blankIfZero: m.FilmsProcessingFee <= 0m);
                     RenderEmptyCells(table, 2);
 
                     // Left: blank cutout covering all remaining cascade lines dynamically (CRIT-09 / HIGH-17)
@@ -348,6 +330,7 @@ public class PdfExportService
                     uint cascadeRowSpan = renderVat ? 13u : 12u;
                     table.Cell().ColumnSpan(6).RowSpan(cascadeRowSpan).Border(0.5f).Text("");
 
+                    // ALL Waterfall Rows from جملة الخامات down to سعر الوحدة go in كلي (Cols 7 & 8) per Reference Image 1
                     // Cascade 4: جملة الخامات
                     table.Cell().Border(0.5f).Background(Colors.Grey.Lighten5).Padding(1).AlignRight().Text("جملة الخامات").Bold();
                     RenderEmptyCells(table, 5);
@@ -358,63 +341,57 @@ public class PdfExportService
                     RenderEmptyCells(table, 5);
                     RenderPoundPiaster(table, m.SubTotal1, isBold: true);
 
-                    // Cascade 6: مصروفات إدارية
+                    // Cascade 6: مصروفات إدارية (moved to كلي per Image 1)
                     table.Cell().Border(0.5f).Padding(1).AlignRight().Text("مصروفات إدارية").Bold();
-                    RenderEmptyCells(table, 3);
+                    RenderEmptyCells(table, 5);
                     RenderPoundPiaster(table, m.AdminExpenses, showDashIfZero: !m.ApplyAdminExpenses);
-                    RenderEmptyCells(table, 2);
 
                     // Cascade 7: إجمالي المصروفات
                     table.Cell().Border(0.5f).Background(Colors.Grey.Lighten5).Padding(1).AlignRight().Text("إجمالي المصروفات").Bold();
                     RenderEmptyCells(table, 5);
                     RenderPoundPiaster(table, m.TotalExpenses, isBold: true);
 
-                    // Cascade 8: النسبة
+                    // Cascade 8: النسبة (moved to كلي per Image 1)
                     table.Cell().Border(0.5f).Padding(1).AlignRight().Text("النسبة").Bold();
-                    RenderEmptyCells(table, 3);
+                    RenderEmptyCells(table, 5);
                     RenderPoundPiaster(table, m.MarkupAmount, showDashIfZero: !m.ApplyMarkup);
-                    RenderEmptyCells(table, 2);
 
                     // Cascade 9: الجملة
                     table.Cell().Border(0.5f).Padding(1).AlignRight().Text("الجملة").Bold();
                     RenderEmptyCells(table, 5);
                     RenderPoundPiaster(table, m.TotalAfterMarkup, isBold: true);
 
-                    // Cascade 10: وزارة المالية
+                    // Cascade 10: وزارة المالية (moved to كلي per Image 1)
                     table.Cell().Border(0.5f).Padding(1).AlignRight().Text("وزارة المالية").Bold();
-                    RenderEmptyCells(table, 3);
+                    RenderEmptyCells(table, 5);
                     RenderPoundPiaster(table, m.MinistryOfFinanceFee);
-                    RenderEmptyCells(table, 2);
 
-                    // Cascade 11: ص.ت.العاملين
+                    // Cascade 11: ص.ت.العاملين (moved to كلي per Image 1)
                     table.Cell().Border(0.5f).Padding(1).AlignRight().Text("ص.ت.العاملين").Bold();
-                    RenderEmptyCells(table, 3);
+                    RenderEmptyCells(table, 5);
                     RenderPoundPiaster(table, m.WorkersSyndicateFund);
-                    RenderEmptyCells(table, 2);
 
                     // Cascade 12: الإجمالي (2)
                     table.Cell().Border(0.5f).Background(Colors.Grey.Lighten5).Padding(1).AlignRight().Text("الإجمالي (2)").Bold();
                     RenderEmptyCells(table, 5);
                     RenderPoundPiaster(table, m.SubTotal2, isBold: true);
 
-                    // Cascade 13: أخرى
+                    // Cascade 13: أخرى (moved to كلي per Image 1)
                     table.Cell().Border(0.5f).Padding(1).AlignRight().Text("أخرى").Bold();
-                    RenderEmptyCells(table, 3);
+                    RenderEmptyCells(table, 5);
                     RenderPoundPiaster(table, m.OtherAmount, showDashIfZero: !m.ApplyOther);
-                    RenderEmptyCells(table, 2);
 
                     // Cascade 14: إجمالي (3)
                     table.Cell().Border(0.5f).Padding(1).AlignRight().Text("إجمالي (3)").Bold();
                     RenderEmptyCells(table, 5);
                     RenderPoundPiaster(table, m.SubTotal3, isBold: true);
 
-                    // Cascade 14.5: ضريبة القيمة المضافة (14%) - CRIT-09 / HIGH-17 Fix
+                    // Cascade 14.5: ضريبة القيمة المضافة (14%) - moved to كلي per Image 1
                     if (renderVat)
                     {
                         table.Cell().Border(0.5f).Padding(1).AlignRight().Text("ض. القيمة المضافة (14%)").Bold();
-                        RenderEmptyCells(table, 3);
+                        RenderEmptyCells(table, 5);
                         RenderPoundPiaster(table, m.VatAmount);
-                        RenderEmptyCells(table, 2);
                     }
 
                     // Cascade 15: القيمة الإجمالية النهائية
@@ -519,24 +496,41 @@ public class PdfExportService
         return 0m;
     }
 
-    private static void RenderPoundPiaster(TableDescriptor table, decimal amount, bool isBold = false, bool showDashIfZero = false)
+    /// <summary>
+    /// Machinery & labour rows come strictly from the system's machinery catalog snapshot saved
+    /// with the moqaysa (kept in catalog order); nothing is hard-coded or filtered out.
+    /// </summary>
+    public static List<MoqaysaMachineryItem> NormalizeMachineryRows(List<MoqaysaMachineryItem> rawMachineries) =>
+        rawMachineries.ToList();
+
+    private static void RenderPoundPiaster(TableDescriptor table, decimal amount, bool isBold = false, bool showDashIfZero = false, bool blankIfZero = false)
     {
         bool isZero = Math.Abs(amount) < 0.001m;
-        if (showDashIfZero && isZero)
+        if (isZero)
         {
-            table.Cell().Border(0.5f).Padding(1).AlignCenter().Text("-").FontSize(7);
-            table.Cell().Border(0.5f).Padding(1).AlignCenter().Text("-").FontSize(7);
-            return;
+            if (blankIfZero)
+            {
+                table.Cell().Border(0.5f).Padding(1).Text("");
+                table.Cell().Border(0.5f).Padding(1).Text("");
+                return;
+            }
+            if (showDashIfZero)
+            {
+                table.Cell().Border(0.5f).Padding(1).AlignCenter().Text("-").FontSize(7);
+                table.Cell().Border(0.5f).Padding(1).AlignCenter().Text("-").FontSize(7);
+                return;
+            }
         }
 
         long totalPiasters = (long)Math.Round(Math.Abs(amount) * 100m, MidpointRounding.AwayFromZero);
         long p = totalPiasters / 100L;
         long pi = totalPiasters % 100L;
 
-        var cPi = table.Cell().Border(0.5f).Padding(1).AlignCenter().Text(pi.ToString("D2")).FontSize(7);
+        string piText = (pi == 0 && p > 0) ? "-" : pi.ToString("D2");
+        var cPi = table.Cell().Border(0.5f).Padding(1).AlignCenter().Text(piText).FontSize(7);
         if (isBold) cPi.Bold();
 
-        var cP = table.Cell().Border(0.5f).Padding(1).AlignCenter().Text(p.ToString()).FontSize(7);
+        var cP = table.Cell().Border(0.5f).Padding(1).AlignCenter().Text(p.ToString("N0")).FontSize(7);
         if (isBold) cP.Bold();
     }
 
@@ -613,10 +607,10 @@ public class PdfExportService
                         // Center: البيان
                         columns.RelativeColumn(5.0f);
 
-                        // Left: اجمالى (قرش, جنيه)
+                        // Inner Left: اجمالى (قرش, جنيه)
                         columns.RelativeColumn(0.9f);
                         columns.RelativeColumn(1.4f);
-                        // Left: أفرادى (قرش, جنيه)
+                        // Far Left: أفرادى (قرش, جنيه)
                         columns.RelativeColumn(0.9f);
                         columns.RelativeColumn(1.4f);
                     });
@@ -642,19 +636,60 @@ public class PdfExportService
                         header.Cell().Border(0.5f).Background(Colors.Grey.Lighten5).Padding(1).AlignCenter().Text("جنيه").FontSize(7);
                     });
 
-                    // Line 1: من حـ / {Account}
-                    // Under اجمالى: - -
-                    table.Cell().Border(0.5f).Padding(1).AlignCenter().Text("-");
-                    table.Cell().Border(0.5f).Padding(1).AlignCenter().Text("-");
-                    // Under أفرادى: Amount (Request 7 fix)
-                    RenderPoundPiaster(table, t.SettlementGrandTotal, isBold: true);
-                    // Center Statement
-                    table.Cell().Border(0.5f).Padding(1).AlignRight().Text(t.Account?.DebitHeaderTextAr ?? "من حـ / الإدارة العامة").Bold().Underline();
-                    // Left 4 cells
-                    RenderEmptyDashes(table, 4);
+                    // Determine if single account (Tasweya1.doc) or multi-account (Tasweya2.doc)
+                    var sharesAcrossMoqaysat = t.MoqaysaLinks?
+                        .Where(ml => ml.Moqaysa != null && ml.Moqaysa.AccountShares != null && ml.Moqaysa.AccountShares.Any())
+                        .GroupBy(ml => ml.MoqaysaId)
+                        .Select(g => g.First())
+                        .SelectMany(ml => ml.Moqaysa!.AccountShares)
+                        .GroupBy(s => s.AccountId)
+                        .Select(g =>
+                        {
+                            var first = g.First();
+                            var accName = first.Account?.AccountNameAr ?? (first.AccountId == t.AccountId ? (t.Account?.AccountNameAr ?? "غير محدد") : $"حساب #{first.AccountId}");
+                            var totalAllocated = g.Sum(x => x.AllocatedAmount);
+                            return (Name: accName, Amount: totalAllocated > 0 ? totalAllocated : t.SettlementGrandTotal);
+                        }).ToList() ?? new List<(string Name, decimal Amount)>();
 
-                    // Line 2: إذن تشغيل رقم
-                    RenderEmptyCells(table, 4);
+                    bool isMultiAccount = sharesAcrossMoqaysat.Count > 1;
+                    if (isMultiAccount)
+                    {
+                        decimal sharesSum = sharesAcrossMoqaysat.Sum(s => s.Amount);
+                        if (sharesSum != t.SettlementGrandTotal && sharesSum > 0m)
+                        {
+                            var last = sharesAcrossMoqaysat[^1];
+                            sharesAcrossMoqaysat[^1] = (last.Name, Math.Round(last.Amount + (t.SettlementGrandTotal - sharesSum), 2, MidpointRounding.AwayFromZero));
+                        }
+                    }
+
+                    if (isMultiAccount)
+                    {
+                        // Tasweya2: من مذكورين then individual accounts with allocated shares in Right أفرادى
+                        RenderEmptyCells(table, 4);
+                        table.Cell().Border(0.5f).Padding(1).AlignRight().Text("من مذكورين").Bold().Underline();
+                        RenderEmptyCells(table, 4);
+
+                        foreach (var share in sharesAcrossMoqaysat)
+                        {
+                            RenderEmptyCells(table, 2);
+                            RenderPoundPiaster(table, share.Amount, isBold: true);
+                            table.Cell().Border(0.5f).Padding(1).AlignRight().Text($"    من حـ / {share.Name}").Bold();
+                            RenderEmptyCells(table, 4);
+                        }
+                    }
+                    else
+                    {
+                        // Tasweya1: Single account directly in Right أفرادى
+                        RenderEmptyCells(table, 2);
+                        RenderPoundPiaster(table, t.SettlementGrandTotal, isBold: true);
+                        table.Cell().Border(0.5f).Padding(1).AlignRight().Text(t.Account?.DebitHeaderTextAr ?? "من حـ / الإدارة العامة").Bold().Underline();
+                        RenderEmptyCells(table, 4);
+                    }
+
+                    // Line 2: إذن تشغيل رقم + Debit Sum under Right اجمالى (per Image 2 & Tasweya1/2.doc)
+                    RenderPoundPiaster(table, t.SettlementGrandTotal, isBold: true);
+                    table.Cell().Border(0.5f).Padding(1).AlignCenter().Text("ـــــ").FontSize(7);
+                    table.Cell().Border(0.5f).Padding(1).AlignCenter().Text("ــــــــ").FontSize(7);
                     table.Cell().Border(0.5f).Padding(1).AlignRight().Text($"إذن تشغيل رقم : {t.JobOrderNumbersText}");
                     RenderEmptyCells(table, 4);
 
@@ -670,32 +705,31 @@ public class PdfExportService
 
                     // Line 5: إلى مذكورين
                     RenderEmptyCells(table, 4);
-                    table.Cell().Border(0.5f).Padding(1).AlignCenter().Text("إلى مذكورين").Bold().Underline();
+                    table.Cell().Border(0.5f).Padding(1).AlignRight().Text("إلى مذكورين").Bold().Underline();
                     RenderEmptyCells(table, 4);
 
-                    // Line 6: حـ / الإيرادات
+                    // Line 6: حـ / الإيرادات (placed in FAR LEFT أفرادى Cols 8 & 9 per Image 2)
                     RenderEmptyCells(table, 4);
-                    table.Cell().Border(0.5f).Padding(1).AlignCenter().Text("حـ / الإيرادات").Bold().Underline();
+                    table.Cell().Border(0.5f).Padding(1).AlignRight().Text("حـ / الإيرادات").Bold().Underline();
+                    RenderEmptyCells(table, 2);
                     RenderPoundPiaster(table, t.RevenuesTotal, isBold: true);
-                    table.Cell().Border(0.5f).Padding(1).AlignCenter().Text("-");
-                    table.Cell().Border(0.5f).Padding(1).AlignCenter().Text("-");
 
-                    // Line 7: حـ / القيمة المضافة (if > 0)
+                    // Line 7: حـ / القيمة المضافة (if > 0, placed in FAR LEFT أفرادى Cols 8 & 9 per Image 2)
                     if (t.VatTotal > 0)
                     {
                         RenderEmptyCells(table, 4);
-                        table.Cell().Border(0.5f).Padding(1).AlignCenter().Text("حـ / القيمة المضافة").Bold().Underline();
+                        table.Cell().Border(0.5f).Padding(1).AlignRight().Text("حـ / القيمة المضافة").Bold().Underline();
+                        RenderEmptyCells(table, 2);
                         RenderPoundPiaster(table, t.VatTotal, isBold: true);
-                        table.Cell().Border(0.5f).Padding(1).AlignCenter().Text("-");
-                        table.Cell().Border(0.5f).Padding(1).AlignCenter().Text("-");
                     }
 
                     void RenderTasweyaSubRow(string label, decimal amount)
                     {
                         RenderEmptyCells(table, 4);
                         table.Cell().Border(0.5f).Padding(1).AlignRight().Text($"    {label}");
-                        RenderEmptyCells(table, 2);
+                        // Inner Left اجمالى (Cols 6 & 7) per Image 2
                         RenderPoundPiaster(table, amount);
+                        RenderEmptyCells(table, 2);
                     }
 
                     RenderTasweyaSubRow("خامـــــــات", t.TotalMaterialsSum);
@@ -707,12 +741,19 @@ public class PdfExportService
                     if (t.WorkersFundSum > 0) RenderTasweyaSubRow("ص. ت. العاملين", t.WorkersFundSum);
                     if (t.OtherAmountSum > 0) RenderTasweyaSubRow("أخرى", t.OtherAmountSum);
 
-                    // Master Balanced Total Row
+                    // Revenue Breakdown Subtotal Row in Inner Left اجمالى (Cols 6 & 7) per Image 2
+                    RenderEmptyCells(table, 4);
+                    table.Cell().Border(0.5f).Padding(1).AlignLeft().Text("إجمالي بنود الإيرادات").Bold().FontSize(7);
+                    RenderPoundPiaster(table, t.RevenuesTotal, isBold: true);
+                    RenderEmptyCells(table, 2);
+
+                    // Master Balanced Total Row (Far Right اجمالى Cols 1 & 2 AND Far Left أفرادى Cols 8 & 9)
+                    string cleanWords = ArabicTafqeetService.StripLeadingPrefix(t.TotalAmountInWordsAr);
                     RenderPoundPiaster(table, t.SettlementGrandTotal, isBold: true);
                     RenderEmptyCells(table, 2);
-                    table.Cell().Border(1).Background(Colors.Grey.Lighten4).Padding(2).AlignCenter().Text($"فقط وقدره: {t.TotalAmountInWordsAr}").Bold().FontSize(7.5f);
-                    RenderPoundPiaster(table, t.SettlementGrandTotal, isBold: true);
+                    table.Cell().Border(1).Background(Colors.Grey.Lighten4).Padding(2).AlignRight().Text($"فقط وقدره: {cleanWords}").Bold().FontSize(7.5f);
                     RenderEmptyCells(table, 2);
+                    RenderPoundPiaster(table, t.SettlementGrandTotal, isBold: true);
                 });
 
                 page.Footer().Column(col =>

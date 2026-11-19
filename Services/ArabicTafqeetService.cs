@@ -8,4 +8,12 @@ public static class ArabicTafqeetService
 
     public static string ToWords(decimal amount, string currencyName, string fractionalName) =>
         _instance.ToWords(amount, currencyName, fractionalName);
+
+    public static string StripLeadingPrefix(string? words)
+    {
+        if (string.IsNullOrWhiteSpace(words)) return string.Empty;
+        return System.Text.RegularExpressions.Regex
+            .Replace(words.Trim(), @"^فقط\s+وقدره\s*:?\s*", string.Empty)
+            .Trim();
+    }
 }
