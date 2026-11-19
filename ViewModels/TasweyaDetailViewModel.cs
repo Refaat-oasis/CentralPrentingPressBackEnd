@@ -37,4 +37,5 @@ public class TasweyaDetailViewModel
     public DateTime CreatedAtUtc { get; set; }
 
     public List<TasweyaMoqaysaItemViewModel> MoqaysaLinks { get; set; } = new();
+    public List<TasweyaAccountShareViewModel> AccountShares { get; set; } = new();
 }

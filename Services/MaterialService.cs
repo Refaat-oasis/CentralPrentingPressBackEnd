@@ -23,7 +23,7 @@ public class MaterialService : IMaterialService
 
     public async Task<List<MaterialViewModel>> GetAllAsync(bool activeOnly = false, CancellationToken ct = default)
     {
-        var query = _context.Materials.AsQueryable();
+        var query = _context.Materials.IgnoreQueryFilters().AsQueryable();
         if (activeOnly)
             query = query.Where(m => m.IsActive);
 
@@ -41,7 +41,9 @@ public class MaterialService : IMaterialService
 
     public async Task<MaterialViewModel?> GetByIdAsync(int id, CancellationToken ct = default)
     {
-        var item = await _context.Materials.FindAsync(new object[] { id }, ct);
+        var item = await _context.Materials
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(m => m.MaterialId == id, ct);
         return item == null ? null : MapToViewModel(item);
     }
 
@@ -67,7 +69,9 @@ public class MaterialService : IMaterialService
     public async Task<MaterialViewModel?> UpdateAsync(int id, MaterialDto dto, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(dto);
-        var item = await _context.Materials.FindAsync(new object[] { id }, ct);
+        var item = await _context.Materials
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(m => m.MaterialId == id, ct);
         if (item == null) return null;
 
         if (string.IsNullOrWhiteSpace(dto.MaterialNameAr))
@@ -82,7 +86,9 @@ public class MaterialService : IMaterialService
 
     public async Task<bool> ToggleActiveAsync(int id, CancellationToken ct = default)
     {
-        var item = await _context.Materials.FindAsync(new object[] { id }, ct);
+        var item = await _context.Materials
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(m => m.MaterialId == id, ct);
         if (item == null) return false;
 
         item.IsActive = !item.IsActive;

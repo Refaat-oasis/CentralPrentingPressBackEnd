@@ -20,19 +20,22 @@ public class TasweyaService : ITasweyaService
     private readonly PdfExportService _pdfExportService;
     private readonly ITafqeetService _tafqeetService;
     private readonly Microsoft.Extensions.Logging.ILogger<TasweyaService> _logger;
+    private readonly CentralPress.API.Documents.DocumentService _documentService;
 
     public TasweyaService(
         ApplicationDbContext context,
         WordExportService wordExportService,
         PdfExportService pdfExportService,
         ITafqeetService tafqeetService,
-        Microsoft.Extensions.Logging.ILogger<TasweyaService> logger)
+        Microsoft.Extensions.Logging.ILogger<TasweyaService> logger,
+        CentralPress.API.Documents.DocumentService documentService)
     {
         _context = context;
         _wordExportService = wordExportService;
         _pdfExportService = pdfExportService;
         _tafqeetService = tafqeetService;
         _logger = logger;
+        _documentService = documentService;
     }
 
     public async Task<List<TasweyaUnsettledMoqaysaViewModel>> GetUnsettledMoqaysatAsync(
@@ -185,11 +188,23 @@ public class TasweyaService : ITasweyaService
             .AsNoTracking()
             .Include(t => t.Account)
             .Include(t => t.Customer)
+            .Include(t => t.MoqaysaLinks)
+                .ThenInclude(ml => ml.Moqaysa)
+                    .ThenInclude(m => m!.AccountShares)
+                        .ThenInclude(s => s.Account)
             .Include(t => t.PaymentOrderLinks.Where(l => l.IsActive && l.PaymentOrder != null && l.PaymentOrder.IsActive))
                 .ThenInclude(l => l.PaymentOrder)
             .AsQueryable();
 
-        if (accountId.HasValue) query = query.Where(t => t.AccountId == accountId.Value);
+        if (accountId.HasValue)
+        {
+            int targetAcc = accountId.Value;
+            query = query.Where(t =>
+                t.AccountId == targetAcc ||
+                t.MoqaysaLinks.Any(ml =>
+                    ml.Moqaysa != null &&
+                    ml.Moqaysa.AccountShares.Any(s => s.AccountId == targetAcc)));
+        }
         if (customerId.HasValue) query = query.Where(t => t.CustomerId == customerId.Value);
         if (isPaid.HasValue) query = query.Where(t => t.IsPaid == isPaid.Value);
         if (activeOnly) query = query.Where(t => t.IsActive);
@@ -198,16 +213,51 @@ public class TasweyaService : ITasweyaService
             .OrderByDescending(t => t.TasweyaId)
             .ToListAsync(ct);
 
+        var linkedMoqaysaIds = items
+            .SelectMany(t => t.MoqaysaLinks.Select(ml => ml.MoqaysaId))
+            .Distinct()
+            .ToList();
+
+        var moqaysaActiveLinkCounts = linkedMoqaysaIds.Count == 0
+            ? new Dictionary<int, int>()
+            : await _context.TasweyaMoqaysaLinks
+                .AsNoTracking()
+                .Where(l => linkedMoqaysaIds.Contains(l.MoqaysaId) && l.Tasweya != null && l.Tasweya.IsActive)
+                .GroupBy(l => l.MoqaysaId)
+                .Select(g => new { MoqaysaId = g.Key, DistinctTasweyat = g.Select(x => x.TasweyaId).Distinct().Count() })
+                .ToDictionaryAsync(x => x.MoqaysaId, x => x.DistinctTasweyat, ct);
+
         return items.Select(t =>
         {
             var activeLink = t.PaymentOrderLinks.FirstOrDefault(l => l.IsActive && l.PaymentOrder != null && l.PaymentOrder.IsActive);
+            var distinctMoqaysat = t.MoqaysaLinks
+                .Where(ml => ml.Moqaysa != null)
+                .Select(ml => ml.Moqaysa!)
+                .GroupBy(m => m.MoqaysaId)
+                .Select(g => g.First())
+                .ToList();
+            var shareAccountNames = distinctMoqaysat
+                .SelectMany(m => m.AccountShares)
+                .GroupBy(s => s.AccountId)
+                .Select(g => g.First().Account?.AccountNameAr)
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Distinct()
+                .ToList();
+            bool isSharedAcrossMultipleTasweyat = distinctMoqaysat.Any(m =>
+                moqaysaActiveLinkCounts.TryGetValue(m.MoqaysaId, out int cnt) && cnt > 1);
+            decimal fullSum = distinctMoqaysat.Sum(m => m.FinalGrandTotal);
+            bool isUnifiedMulti = shareAccountNames.Count > 1 &&
+                (!isSharedAcrossMultipleTasweyat || Math.Abs(t.SettlementGrandTotal - fullSum) <= 1m);
+
             return new TasweyaSummaryViewModel
             {
                 TasweyaId = t.TasweyaId,
                 SettlementNumber = t.SettlementNumber,
                 SettlementDate = t.SettlementDate,
                 AccountId = t.AccountId,
-                AccountNameAr = t.Account != null ? t.Account.AccountNameAr : "غير محدد",
+                AccountNameAr = isUnifiedMulti
+                    ? string.Join(" ، ", shareAccountNames)
+                    : (t.Account != null ? t.Account.AccountNameAr : "غير محدد"),
                 CustomerId = t.CustomerId,
                 CustomerNameAr = t.Customer != null ? t.Customer.CustomerNameAr : "غير محدد",
                 ClaimNumber = t.ClaimNumber,
@@ -234,6 +284,7 @@ public class TasweyaService : ITasweyaService
             .Include(x => x.MoqaysaLinks)
                 .ThenInclude(l => l.Moqaysa)
                     .ThenInclude(m => m!.AccountShares)
+                        .ThenInclude(s => s.Account)
             .Include(x => x.PaymentOrderLinks.Where(l => l.IsActive && l.PaymentOrder != null && l.PaymentOrder.IsActive))
                 .ThenInclude(l => l.PaymentOrder)
             .FirstOrDefaultAsync(x => x.TasweyaId == id, ct);
@@ -241,6 +292,10 @@ public class TasweyaService : ITasweyaService
         if (t == null) return null;
 
         var activeLink = t.PaymentOrderLinks.FirstOrDefault(l => l.IsActive && l.PaymentOrder != null && l.PaymentOrder.IsActive);
+
+        var (sharesAcrossMoqaysat, resolvedTotals, resolvedWords) = await ResolveViewTotalsAndSharesAsync(t, ct);
+        bool isUnifiedMulti = sharesAcrossMoqaysat.Count > 1 &&
+            Math.Abs(resolvedTotals.SettlementGrandTotal - t.SettlementGrandTotal) <= 1m;
 
         return new TasweyaDetailViewModel
         {
@@ -251,7 +306,9 @@ public class TasweyaService : ITasweyaService
             Account = t.Account != null ? new AccountViewModel
             {
                 AccountId = t.Account.AccountId,
-                AccountNameAr = t.Account.AccountNameAr,
+                AccountNameAr = sharesAcrossMoqaysat.Count > 1
+                    ? string.Join(" ، ", sharesAcrossMoqaysat.Select(s => s.AccountNameAr).Distinct())
+                    : t.Account.AccountNameAr,
                 AccountCode = t.Account.AccountCode,
                 DebitHeaderTextAr = t.Account.DebitHeaderTextAr,
                 BudgetCeiling = t.Account.BudgetCeiling,
@@ -272,24 +329,25 @@ public class TasweyaService : ITasweyaService
             } : null,
             ClaimNumber = t.ClaimNumber,
             JobOrderNumbersText = t.JobOrderNumbersText,
-            TotalMaterialsSum = t.TotalMaterialsSum,
-            TotalWorkerWagesSum = t.TotalWorkerWagesSum,
-            TotalMachineCostsSum = t.TotalMachineCostsSum,
-            AdminExpensesSum = t.AdminExpensesSum,
-            MarkupAmountSum = t.MarkupAmountSum,
-            MinistryOfFinanceSum = t.MinistryOfFinanceSum,
-            WorkersFundSum = t.WorkersFundSum,
-            OtherAmountSum = t.OtherAmountSum,
-            RevenuesTotal = t.RevenuesTotal,
-            VatTotal = t.VatTotal,
-            SettlementGrandTotal = t.SettlementGrandTotal,
-            TotalAmountInWordsAr = t.TotalAmountInWordsAr,
+            TotalMaterialsSum = resolvedTotals.TotalMaterialsSum,
+            TotalWorkerWagesSum = resolvedTotals.TotalWorkerWagesSum,
+            TotalMachineCostsSum = resolvedTotals.TotalMachineCostsSum,
+            AdminExpensesSum = resolvedTotals.AdminExpensesSum,
+            MarkupAmountSum = resolvedTotals.MarkupAmountSum,
+            MinistryOfFinanceSum = resolvedTotals.MinistryOfFinanceSum,
+            WorkersFundSum = resolvedTotals.WorkersFundSum,
+            OtherAmountSum = resolvedTotals.OtherAmountSum,
+            RevenuesTotal = resolvedTotals.RevenuesTotal,
+            VatTotal = resolvedTotals.VatTotal,
+            SettlementGrandTotal = resolvedTotals.SettlementGrandTotal,
+            TotalAmountInWordsAr = resolvedWords,
             IsPaid = t.IsPaid,
             PaidAtUtc = t.PaidAtUtc,
             IsActive = t.IsActive,
             ActivePaymentOrderId = activeLink?.PaymentOrderId,
             ActivePaymentOrderNumber = activeLink?.PaymentOrder?.PaymentOrderNumber,
             CreatedAtUtc = t.CreatedAtUtc,
+            AccountShares = sharesAcrossMoqaysat,
             MoqaysaLinks = t.MoqaysaLinks.Select(ml =>
             {
                 var share = ml.Moqaysa?.AccountShares.FirstOrDefault(s => s.AccountId == t.AccountId);
@@ -298,8 +356,10 @@ public class TasweyaService : ITasweyaService
                     LinkId = ml.LinkId,
                     MoqaysaId = ml.MoqaysaId,
                     JobOrderNumber = ml.Moqaysa?.JobOrderNumber ?? "",
-                    SharePercentage = share?.SharePercentage ?? 100m,
-                    AllocatedAmount = share?.AllocatedAmount ?? (ml.Moqaysa?.FinalGrandTotal ?? 0m),
+                    SharePercentage = isUnifiedMulti ? 100m : (share?.SharePercentage ?? 100m),
+                    AllocatedAmount = isUnifiedMulti
+                        ? (ml.Moqaysa?.FinalGrandTotal ?? 0m)
+                        : (share?.AllocatedAmount ?? (ml.Moqaysa?.FinalGrandTotal ?? 0m)),
                     FinalGrandTotal = ml.Moqaysa?.FinalGrandTotal ?? 0m,
                     ApplyVat = ml.Moqaysa?.ApplyVat ?? false,
                     VatAmount = ml.Moqaysa?.VatAmount ?? 0m
@@ -313,31 +373,17 @@ public class TasweyaService : ITasweyaService
         string? userId,
         CancellationToken ct = default)
     {
-        var singleAsBatch = new CreateMultiAccountTasweyaDto
-        {
-            SettlementDate = dto.SettlementDate,
-            CustomerId = dto.CustomerId,
-            MoqaysaIds = dto.MoqaysaIds,
-            OverrideMarkupPercent = dto.OverrideMarkupPercent,
-            Accounts = new List<AccountSettlementEntryDto>
-            {
-                new()
-                {
-                    AccountId = dto.AccountId,
-                    SettlementNumber = dto.SettlementNumber,
-                    ClaimNumber = dto.ClaimNumber,
-                    MoqaysaIds = dto.MoqaysaIds
-                }
-            }
-        };
-
-        var (success, message, batchResult) = await CreateMultiAccountAsync(singleAsBatch, userId, ct);
-        if (!success || batchResult == null || batchResult.Items.Count == 0)
-            return (false, message, null);
-
-        var item = batchResult.Items[0];
-        item.Message = "تم إصدار كشف التسوية (المطالبة المالية) بنجاح";
-        return (true, item.Message, item);
+        return await CreateUnifiedTasweyaInternalAsync(
+            rawSettlementNumber: dto.SettlementNumber,
+            settlementDate: dto.SettlementDate,
+            requestedAccountId: dto.AccountId,
+            customerId: dto.CustomerId,
+            claimNumber: dto.ClaimNumber,
+            moqaysaIds: dto.MoqaysaIds,
+            overrideMarkupPercent: dto.OverrideMarkupPercent,
+            extraRequestedAccountIds: null,
+            userId: userId,
+            ct: ct);
     }
 
     public async Task<(bool Success, string Message, BatchTasweyaCreateResultViewModel? Result)> CreateMultiAccountAsync(
@@ -354,171 +400,240 @@ public class TasweyaService : ITasweyaService
         if (dto.Accounts.GroupBy(a => a.AccountId).Any(g => g.Count() > 1))
             return (false, "لا يمكن تكرار نفس الحساب الدافع أكثر من مرة في نفس الدفعة", null);
 
-        var customer = await _context.Customers.FindAsync(new object[] { dto.CustomerId }, ct);
+        var firstEntry = dto.Accounts[0];
+        if (string.IsNullOrWhiteSpace(firstEntry.SettlementNumber))
+            return (false, "يرجى كتابة رقم كشف التسوية", null);
+
+        var combinedMoqaysaIds = dto.MoqaysaIds.ToList();
+        var extraAccountIds = dto.Accounts.Select(a => a.AccountId).Distinct().ToList();
+
+        var (success, message, result) = await CreateUnifiedTasweyaInternalAsync(
+            rawSettlementNumber: firstEntry.SettlementNumber,
+            settlementDate: dto.SettlementDate,
+            requestedAccountId: firstEntry.AccountId,
+            customerId: dto.CustomerId,
+            claimNumber: firstEntry.ClaimNumber,
+            moqaysaIds: combinedMoqaysaIds,
+            overrideMarkupPercent: dto.OverrideMarkupPercent,
+            extraRequestedAccountIds: extraAccountIds,
+            userId: userId,
+            ct: ct);
+
+        if (!success || result == null)
+            return (false, message, null);
+
+        var batchResult = new BatchTasweyaCreateResultViewModel
+        {
+            Message = "تم إصدار كشف التسوية (المطالبة المالية) بنجاح",
+            CreatedCount = 1,
+            Items = new List<TasweyaCreateResultViewModel> { result }
+        };
+
+        return (true, batchResult.Message, batchResult);
+    }
+
+    private async Task<(bool Success, string Message, TasweyaCreateResultViewModel? Result)> CreateUnifiedTasweyaInternalAsync(
+        string rawSettlementNumber,
+        DateOnly settlementDate,
+        int requestedAccountId,
+        int customerId,
+        string? claimNumber,
+        List<int> moqaysaIds,
+        decimal? overrideMarkupPercent,
+        List<int>? extraRequestedAccountIds,
+        string? userId,
+        CancellationToken ct)
+    {
+        if (moqaysaIds == null || moqaysaIds.Count == 0)
+            return (false, "يرجى تحديد مقايسة واحدة على الأقل لإدراجها في كشف التسوية", null);
+
+        if (string.IsNullOrWhiteSpace(rawSettlementNumber))
+            return (false, "يرجى كتابة رقم كشف التسوية", null);
+
+        var distinctMoqaysaIds = moqaysaIds.Distinct().ToList();
+        if (distinctMoqaysaIds.Count != moqaysaIds.Count)
+            return (false, "بعض المقايسات المحددة غير موجودة أو غير فعالة", null);
+
+        var customer = await _context.Customers
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(c => c.CustomerId == customerId, ct);
         if (customer == null)
             return (false, "الجهة الطالبة غير موجودة", null);
+        if (!customer.IsActive)
+            return (false, $"لا يمكن إصدار كشف تسوية للجهة الطالبة '{customer.CustomerNameAr}' لأنها معطلة حالياً.", null);
 
-        var requestedAccountIds = dto.Accounts.Select(a => a.AccountId).Distinct().ToList();
-        var accountsById = await _context.Accounts
-            .Where(a => requestedAccountIds.Contains(a.AccountId))
-            .ToDictionaryAsync(a => a.AccountId, ct);
+        var fy = FinancialYearHelper.GetFinancialYear(settlementDate);
+        var finalSettlementNumber = FinancialYearHelper.FormatSettlementNumber(rawSettlementNumber, settlementDate);
 
-        foreach (var accId in requestedAccountIds)
-        {
-            if (!accountsById.ContainsKey(accId))
-                return (false, "أحد الحسابات المختارة غير صحيح أو غير موجود", null);
-        }
+        var existsInFy = await _context.Tasweyat
+            .IgnoreQueryFilters()
+            .AnyAsync(t => t.SettlementNumber == finalSettlementNumber &&
+                           t.SettlementDate >= fy.StartDate &&
+                           t.SettlementDate <= fy.EndDate, ct);
+        if (existsInFy)
+            return (false, $"رقم كشف التسوية '{finalSettlementNumber}' مسجل بالفعل ضمن السنة المالية ({fy.Code}). يرجى استخدام رقم آخر.", null);
 
-        var distinctMoqaysaIds = dto.MoqaysaIds.Distinct().ToList();
         var moqaysat = await _context.Moqaysat
             .Include(m => m.Customer)
             .Include(m => m.AccountShares)
+                .ThenInclude(s => s.Account)
             .Where(m => distinctMoqaysaIds.Contains(m.MoqaysaId) && m.IsActive)
             .ToListAsync(ct);
 
         if (moqaysat.Count != distinctMoqaysaIds.Count)
             return (false, "بعض المقايسات المحددة غير موجودة أو غير فعالة", null);
 
-        var moqaysatById = moqaysat.ToDictionary(m => m.MoqaysaId);
-        var fy = FinancialYearHelper.GetFinancialYear(dto.SettlementDate);
+        var alreadySettledJobOrders = moqaysat
+            .Where(m => m.IsIncludedInTasweya || (m.AccountShares.Count > 0 && m.AccountShares.All(s => s.IsIncludedInTasweya)))
+            .Select(m => m.JobOrderNumber)
+            .Where(j => !string.IsNullOrEmpty(j))
+            .Distinct()
+            .ToList();
+        if (alreadySettledJobOrders.Count > 0)
+            return (false, $"المقايسات ذات أذون التشغيل ({string.Join(" ، ", alreadySettledJobOrders)}) مُدرجة بالفعل في كشف تسوية آخر نشط.", null);
 
-        // Validate each account entry and prepare computed payloads before writing
-        var seenSettlementNumbers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var preparedEntries = new List<(
-            AccountSettlementEntryDto Entry,
-            AccountEntity Account,
-            string FinalSettlementNumber,
-            List<(Moqaysa Moqaysa, decimal SharePercentage)> Items,
-            TasweyaCalculatedTotals Totals,
-            string Tafqeet,
-            string JobOrdersText)>();
-
-        foreach (var entry in dto.Accounts)
+        // Validate all involved accounts (share accounts + explicitly requested account IDs) exist & active
+        var accountsToValidate = moqaysat
+            .SelectMany(m => m.AccountShares.Where(s => !s.IsIncludedInTasweya && s.SharePercentage > 0m).Select(s => s.AccountId))
+            .ToHashSet();
+        if (requestedAccountId > 0)
+            accountsToValidate.Add(requestedAccountId);
+        if (extraRequestedAccountIds != null)
         {
-            if (string.IsNullOrWhiteSpace(entry.SettlementNumber))
-                return (false, "يرجى كتابة رقم كشف التسوية لكل حساب محدد", null);
+            foreach (var extraId in extraRequestedAccountIds.Where(id => id > 0))
+                accountsToValidate.Add(extraId);
+        }
+        if (accountsToValidate.Count == 0 && customer.AccountId > 0)
+            accountsToValidate.Add(customer.AccountId);
 
-            var account = accountsById[entry.AccountId];
-            var finalSettlementNumber = FinancialYearHelper.FormatSettlementNumber(entry.SettlementNumber, dto.SettlementDate);
+        var accountsById = await _context.Accounts
+            .IgnoreQueryFilters()
+            .Where(a => accountsToValidate.Contains(a.AccountId))
+            .ToDictionaryAsync(a => a.AccountId, ct);
 
-            if (!seenSettlementNumbers.Add(finalSettlementNumber))
-                return (false, $"لا يمكن استخدام نفس رقم كشف التسوية '{finalSettlementNumber}' لأكثر من حساب في نفس الوقت.", null);
-
-            var existsInFy = await _context.Tasweyat
-                .IgnoreQueryFilters()
-                .AnyAsync(t => t.SettlementNumber == finalSettlementNumber &&
-                               t.SettlementDate >= fy.StartDate &&
-                               t.SettlementDate <= fy.EndDate, ct);
-            if (existsInFy)
-                return (false, $"رقم كشف التسوية '{finalSettlementNumber}' مسجل بالفعل ضمن السنة المالية ({fy.Code}). يرجى استخدام رقم آخر.", null);
-
-            List<Moqaysa> entryMoqaysat;
-            if (entry.MoqaysaIds != null && entry.MoqaysaIds.Count > 0)
-            {
-                entryMoqaysat = entry.MoqaysaIds
-                    .Distinct()
-                    .Where(id => moqaysatById.ContainsKey(id))
-                    .Select(id => moqaysatById[id])
-                    .ToList();
-            }
-            else
-            {
-                // Auto-select moqaysat that allocate a positive share to this account
-                entryMoqaysat = moqaysat
-                    .Where(m => ResolveSharePercentage(m, entry.AccountId) > 0m)
-                    .ToList();
-            }
-
-            if (entryMoqaysat.Count == 0)
-                return (false, $"الحساب ({account.AccountNameAr}) لا يمتلك أي حصة مالية في المقايسات المحددة.", null);
-
-            var entryItems = new List<(Moqaysa Moqaysa, decimal SharePercentage)>();
-            foreach (var m in entryMoqaysat)
-            {
-                decimal pct = ResolveSharePercentage(m, entry.AccountId);
-                if (pct <= 0m)
-                    return (false, $"المقايسة (إذن تشغيل: {m.JobOrderNumber}) لا تتضمن حصة مالية لحساب ({account.AccountNameAr}).", null);
-
-                entryItems.Add((m, pct));
-            }
-
-            var targetMoqaysaIds = entryMoqaysat.Select(m => m.MoqaysaId).ToList();
-            var activeConflicts = await _context.TasweyaMoqaysaLinks
-                .Include(link => link.Moqaysa)
-                .Include(link => link.Tasweya)
-                .Where(link => targetMoqaysaIds.Contains(link.MoqaysaId)
-                            && link.Tasweya != null
-                            && link.Tasweya.IsActive
-                            && link.Tasweya.AccountId == entry.AccountId)
-                .Select(link => link.Moqaysa != null ? link.Moqaysa.JobOrderNumber : "")
-                .Where(jobNo => !string.IsNullOrEmpty(jobNo))
-                .Distinct()
-                .ToListAsync(ct);
-
-            if (activeConflicts.Count > 0)
-                return (false, $"المقايسات ذات أذون التشغيل ({string.Join(" ، ", activeConflicts)}) مُدرجة بالفعل في كشف تسوية آخر نشط لحساب ({account.AccountNameAr}).", null);
-
-            var totals = CalculateTotals(entryItems, dto.OverrideMarkupPercent);
-            string tafqeet = _tafqeetService.ToWords(totals.SettlementGrandTotal);
-            string jobOrders = string.Join(" , ", entryMoqaysat.Select(m => m.JobOrderNumber).Distinct());
-
-            preparedEntries.Add((entry, account, finalSettlementNumber, entryItems, totals, tafqeet, jobOrders));
+        foreach (var accId in accountsToValidate)
+        {
+            if (!accountsById.TryGetValue(accId, out var acc))
+                return (false, "أحد الحسابات المختارة غير صحيح أو غير موجود", null);
+            if (!acc.IsActive)
+                return (false, $"لا يمكن استخدام الحساب '{acc.AccountNameAr}' لأنه معطل حالياً.", null);
         }
 
-        var createdTasweyat = new List<(Tasweya Entity, string AccountNameAr)>();
+        // Check active TasweyaMoqaysaLinks conflicts against unsettled shares (or whole Moqaysa if no shares)
+        var unsettledAccountIdsByMoqaysa = moqaysat.ToDictionary(
+            m => m.MoqaysaId,
+            m => m.AccountShares
+                .Where(s => !s.IsIncludedInTasweya && s.SharePercentage > 0m)
+                .Select(s => s.AccountId)
+                .ToHashSet());
 
-        Action buildAll = () =>
-        {
-            createdTasweyat.Clear();
-            foreach (var p in preparedEntries)
+        var existingActiveLinks = await _context.TasweyaMoqaysaLinks
+            .Include(link => link.Moqaysa)
+            .Include(link => link.Tasweya)
+            .Where(link => distinctMoqaysaIds.Contains(link.MoqaysaId)
+                        && link.Tasweya != null
+                        && link.Tasweya.IsActive)
+            .ToListAsync(ct);
+
+        var activeConflicts = existingActiveLinks
+            .Where(link =>
             {
-                var tasweya = new Tasweya
+                var shareAccounts = unsettledAccountIdsByMoqaysa.GetValueOrDefault(link.MoqaysaId);
+                return shareAccounts == null || shareAccounts.Count == 0 || shareAccounts.Contains(link.Tasweya!.AccountId);
+            })
+            .Select(link => link.Moqaysa != null ? link.Moqaysa.JobOrderNumber : "")
+            .Where(jobNo => !string.IsNullOrEmpty(jobNo))
+            .Distinct()
+            .ToList();
+
+        if (activeConflicts.Count > 0)
+            return (false, $"المقايسات ذات أذون التشغيل ({string.Join(" ، ", activeConflicts)}) مُدرجة بالفعل في كشف تسوية آخر نشط.", null);
+
+        var distinctShareAccountIds = moqaysat
+            .SelectMany(m => m.AccountShares
+                .Where(s => !s.IsIncludedInTasweya && s.SharePercentage > 0m)
+                .Select(s => s.AccountId))
+            .Distinct()
+            .ToList();
+
+        int primaryAccountId = requestedAccountId > 0 && (distinctShareAccountIds.Count == 0 || distinctShareAccountIds.Contains(requestedAccountId))
+            ? requestedAccountId
+            : (distinctShareAccountIds.Count > 0
+                ? distinctShareAccountIds[0]
+                : (requestedAccountId > 0 ? requestedAccountId : customer.AccountId));
+
+        if (primaryAccountId <= 0 || !accountsById.ContainsKey(primaryAccountId))
+            return (false, "يرجى تحديد الحساب المحاسبي الدافع لكشف التسوية", null);
+
+        var itemsWithPct = new List<(Moqaysa Moqaysa, decimal SharePercentage)>();
+        foreach (var m in moqaysat)
+        {
+            decimal pct = m.AccountShares.Count > 0
+                ? m.AccountShares.Where(s => !s.IsIncludedInTasweya && s.SharePercentage > 0m).Sum(s => s.SharePercentage)
+                : 100m;
+
+            if (pct <= 0m)
+                return (false, $"المقايسة (إذن تشغيل: {m.JobOrderNumber}) مسواة بالكامل بالفعل ولا تتضمن حصصاً معلقة.", null);
+
+            if (Math.Abs(pct - 100m) <= 0.05m)
+                pct = 100m;
+
+            itemsWithPct.Add((m, pct));
+        }
+
+        var totals = CalculateTotals(itemsWithPct, overrideMarkupPercent);
+        string tafqeet = _tafqeetService.ToWords(totals.SettlementGrandTotal);
+        string jobOrders = string.Join(" , ", moqaysat.Select(m => m.JobOrderNumber).Distinct());
+        string finalClaimNumber = string.IsNullOrWhiteSpace(claimNumber) ? finalSettlementNumber : claimNumber.Trim();
+
+        var tasweya = new Tasweya
+        {
+            SettlementNumber = finalSettlementNumber,
+            SettlementDate = settlementDate,
+            AccountId = primaryAccountId,
+            CustomerId = customerId,
+            ClaimNumber = finalClaimNumber,
+            JobOrderNumbersText = jobOrders,
+
+            TotalMaterialsSum = totals.TotalMaterialsSum,
+            TotalWorkerWagesSum = totals.TotalWorkerWagesSum,
+            TotalMachineCostsSum = totals.TotalMachineCostsSum,
+            AdminExpensesSum = totals.AdminExpensesSum,
+            MarkupAmountSum = totals.MarkupAmountSum,
+            MinistryOfFinanceSum = totals.MinistryOfFinanceSum,
+            WorkersFundSum = totals.WorkersFundSum,
+            OtherAmountSum = totals.OtherAmountSum,
+
+            RevenuesTotal = totals.RevenuesTotal,
+            VatTotal = totals.VatTotal,
+            SettlementGrandTotal = totals.SettlementGrandTotal,
+            TotalAmountInWordsAr = tafqeet,
+
+            IsPaid = false,
+            CreatedAtUtc = DateTime.UtcNow,
+            CreatedByUserId = userId,
+            IsActive = true
+        };
+
+        Action buildSingle = () =>
+        {
+            tasweya.MoqaysaLinks.Clear();
+            foreach (var (m, _) in itemsWithPct)
+            {
+                foreach (var share in m.AccountShares.Where(s => !s.IsIncludedInTasweya && s.SharePercentage > 0m))
                 {
-                    SettlementNumber = p.FinalSettlementNumber,
-                    SettlementDate = dto.SettlementDate,
-                    AccountId = p.Entry.AccountId,
-                    CustomerId = dto.CustomerId,
-                    ClaimNumber = string.IsNullOrWhiteSpace(p.Entry.ClaimNumber) ? p.FinalSettlementNumber : p.Entry.ClaimNumber.Trim(),
-                    JobOrderNumbersText = p.JobOrdersText,
-
-                    TotalMaterialsSum = p.Totals.TotalMaterialsSum,
-                    TotalWorkerWagesSum = p.Totals.TotalWorkerWagesSum,
-                    TotalMachineCostsSum = p.Totals.TotalMachineCostsSum,
-                    AdminExpensesSum = p.Totals.AdminExpensesSum,
-                    MarkupAmountSum = p.Totals.MarkupAmountSum,
-                    MinistryOfFinanceSum = p.Totals.MinistryOfFinanceSum,
-                    WorkersFundSum = p.Totals.WorkersFundSum,
-                    OtherAmountSum = p.Totals.OtherAmountSum,
-
-                    RevenuesTotal = p.Totals.RevenuesTotal,
-                    VatTotal = p.Totals.VatTotal,
-                    SettlementGrandTotal = p.Totals.SettlementGrandTotal,
-                    TotalAmountInWordsAr = p.Tafqeet,
-
-                    IsPaid = false,
-                    CreatedAtUtc = DateTime.UtcNow,
-                    CreatedByUserId = userId,
-                    IsActive = true
-                };
-
-                foreach (var (m, _) in p.Items)
-                {
-                    var share = m.AccountShares.FirstOrDefault(s => s.AccountId == p.Entry.AccountId);
-                    if (share != null)
-                    {
-                        share.IsIncludedInTasweya = true;
-                    }
-                    SyncMoqaysaTasweyaFlag(m, fallbackWhenNoShares: true);
-
-                    tasweya.MoqaysaLinks.Add(new TasweyaMoqaysaLink
-                    {
-                        MoqaysaId = m.MoqaysaId
-                    });
+                    share.IsIncludedInTasweya = true;
                 }
+                SyncMoqaysaTasweyaFlag(m, fallbackWhenNoShares: true);
 
-                _context.Tasweyat.Add(tasweya);
-                createdTasweyat.Add((tasweya, p.Account.AccountNameAr));
+                tasweya.MoqaysaLinks.Add(new TasweyaMoqaysaLink
+                {
+                    MoqaysaId = m.MoqaysaId
+                });
             }
+
+            if (_context.Entry(tasweya).State == EntityState.Detached)
+                _context.Tasweyat.Add(tasweya);
         };
 
         try
@@ -529,14 +644,14 @@ public class TasweyaService : ITasweyaService
                 await strategy.ExecuteAsync(async () =>
                 {
                     await using var tx = await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
-                    buildAll();
+                    buildSingle();
                     await _context.SaveChangesAsync(ct);
                     await tx.CommitAsync(ct);
                 });
             }
             else
             {
-                buildAll();
+                buildSingle();
                 await _context.SaveChangesAsync(ct);
             }
         }
@@ -546,35 +661,31 @@ public class TasweyaService : ITasweyaService
             return (false, "تعذر حفظ كشف التسوية: قد يكون رقم كشف التسوية مسجلاً مسبقاً أو هناك تعارض في البيانات", null);
         }
 
-        if (createdTasweyat.Count == 0)
-            return (false, "فشل إنشاء كشوف التسوية", null);
+        var displayAccountNames = distinctShareAccountIds.Count > 1
+            ? distinctShareAccountIds
+                .Where(id => accountsById.ContainsKey(id))
+                .Select(id => accountsById[id].AccountNameAr)
+                .Distinct()
+                .ToList()
+            : new List<string> { accountsById[primaryAccountId].AccountNameAr };
 
-        var itemsResult = createdTasweyat.Select(x => new TasweyaCreateResultViewModel
+        var resultVm = new TasweyaCreateResultViewModel
         {
-            Message = "تم إصدار كشف التسوية بنجاح",
-            TasweyaId = x.Entity.TasweyaId,
-            SettlementNumber = x.Entity.SettlementNumber,
-            AccountId = x.Entity.AccountId,
-            AccountNameAr = x.AccountNameAr,
-            VatTotal = x.Entity.VatTotal,
-            SettlementGrandTotal = x.Entity.SettlementGrandTotal,
-            RevenuesTotal = x.Entity.RevenuesTotal,
-            TotalMaterialsSum = x.Entity.TotalMaterialsSum,
-            TotalWorkerWagesSum = x.Entity.TotalWorkerWagesSum,
-            TotalMachineCostsSum = x.Entity.TotalMachineCostsSum,
-            TotalAmountInWordsAr = x.Entity.TotalAmountInWordsAr
-        }).ToList();
-
-        var batchResult = new BatchTasweyaCreateResultViewModel
-        {
-            Message = itemsResult.Count == 1
-                ? "تم إصدار كشف التسوية (المطالبة المالية) بنجاح"
-                : $"تم إصدار عدد {itemsResult.Count} كشوف تسوية مستقلة بنجاح",
-            CreatedCount = itemsResult.Count,
-            Items = itemsResult
+            Message = "تم إصدار كشف التسوية (المطالبة المالية) بنجاح",
+            TasweyaId = tasweya.TasweyaId,
+            SettlementNumber = tasweya.SettlementNumber,
+            AccountId = tasweya.AccountId,
+            AccountNameAr = string.Join(" ، ", displayAccountNames),
+            VatTotal = tasweya.VatTotal,
+            SettlementGrandTotal = tasweya.SettlementGrandTotal,
+            RevenuesTotal = tasweya.RevenuesTotal,
+            TotalMaterialsSum = tasweya.TotalMaterialsSum,
+            TotalWorkerWagesSum = tasweya.TotalWorkerWagesSum,
+            TotalMachineCostsSum = tasweya.TotalMachineCostsSum,
+            TotalAmountInWordsAr = tasweya.TotalAmountInWordsAr
         };
 
-        return (true, batchResult.Message, batchResult);
+        return (true, resultVm.Message, resultVm);
     }
 
     public async Task<(bool Success, string Message, int? TasweyaId)> UpdateAsync(
@@ -583,11 +694,15 @@ public class TasweyaService : ITasweyaService
         CancellationToken ct = default)
     {
         var tasweya = await _context.Tasweyat
+            .IgnoreQueryFilters()
             .Include(t => t.MoqaysaLinks)
             .FirstOrDefaultAsync(t => t.TasweyaId == id, ct);
 
         if (tasweya == null)
             return (false, "كشف التسوية غير موجود", null);
+
+        if (!tasweya.IsActive)
+            return (false, "لا يمكن تعديل كشف تسوية معطل — يرجى تفعيله أولاً", null);
 
         if (tasweya.IsPaid)
             return (false, "لا يمكن تعديل كشف تسوية تم سداده وتأكيده بأمر دفع رسمي", null);
@@ -616,48 +731,106 @@ public class TasweyaService : ITasweyaService
         if (dto.MoqaysaIds == null || dto.MoqaysaIds.Count == 0)
             return (false, "يرجى تحديد مقايسة واحدة على الأقل", null);
 
-        var account = await _context.Accounts.FindAsync(new object[] { dto.AccountId }, ct);
+        var account = await _context.Accounts
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(a => a.AccountId == dto.AccountId, ct);
         if (account == null)
             return (false, "الحساب المختار غير صحيح", null);
+        if (!account.IsActive)
+            return (false, $"لا يمكن استخدام الحساب '{account.AccountNameAr}' لأنه معطل حالياً.", null);
 
-        var customer = await _context.Customers.FindAsync(new object[] { dto.CustomerId }, ct);
+        var customer = await _context.Customers
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(c => c.CustomerId == dto.CustomerId, ct);
         if (customer == null)
             return (false, "الجهة الطالبة غير موجودة", null);
+        if (!customer.IsActive)
+            return (false, $"لا يمكن استخدام الجهة الطالبة '{customer.CustomerNameAr}' لأنها معطلة حالياً.", null);
 
         var distinctMoqaysaIds = dto.MoqaysaIds.Distinct().ToList();
+        if (distinctMoqaysaIds.Count != dto.MoqaysaIds.Count)
+            return (false, "بعض المقايسات المحددة غير موجودة أو غير فعالة", null);
+
         var moqaysat = await _context.Moqaysat
             .Include(m => m.Customer)
             .Include(m => m.AccountShares)
+                .ThenInclude(s => s.Account)
             .Where(m => distinctMoqaysaIds.Contains(m.MoqaysaId) && m.IsActive)
             .ToListAsync(ct);
 
         if (moqaysat.Count != distinctMoqaysaIds.Count)
             return (false, "بعض المقايسات المحددة غير موجودة أو غير فعالة", null);
 
-        var itemsWithShare = new List<(Moqaysa Moqaysa, decimal SharePercentage)>();
-        foreach (var m in moqaysat)
-        {
-            decimal pct = ResolveSharePercentage(m, dto.AccountId);
-            if (pct <= 0m)
-                return (false, $"المقايسة (إذن تشغيل: {m.JobOrderNumber}) لا تتضمن حصة مالية لحساب ({account.AccountNameAr}).", null);
-            itemsWithShare.Add((m, pct));
-        }
+        var oldMoqaysaIds = tasweya.MoqaysaLinks.Select(ml => ml.MoqaysaId).Distinct().ToList();
+        var involvedCheckIds = oldMoqaysaIds.Union(distinctMoqaysaIds).Distinct().ToList();
 
-        var activeConflicts = await _context.TasweyaMoqaysaLinks
+        var otherActiveLinks = await _context.TasweyaMoqaysaLinks
             .Include(link => link.Moqaysa)
             .Include(link => link.Tasweya)
-            .Where(link => distinctMoqaysaIds.Contains(link.MoqaysaId)
+            .Where(link => involvedCheckIds.Contains(link.MoqaysaId)
                         && link.TasweyaId != id
                         && link.Tasweya != null
-                        && link.Tasweya.IsActive
-                        && link.Tasweya.AccountId == dto.AccountId)
-            .Select(link => link.Moqaysa != null ? link.Moqaysa.JobOrderNumber : "")
-            .Where(jobNo => !string.IsNullOrEmpty(jobNo))
-            .Distinct()
+                        && link.Tasweya.IsActive)
             .ToListAsync(ct);
 
-        if (activeConflicts.Count > 0)
-            return (false, $"إحدى المقايسات المحددة (إذن تشغيل: {string.Join(" ، ", activeConflicts)}) مُدرجة بالفعل في كشف تسوية آخر نشط لحساب ({account.AccountNameAr})", null);
+        var otherActiveAccountIdsByMoqaysa = otherActiveLinks
+            .GroupBy(l => l.MoqaysaId)
+            .ToDictionary(g => g.Key, g => g.Select(x => x.Tasweya!.AccountId).ToHashSet());
+
+        // Validate all involved share accounts are active
+        var shareAccountIds = moqaysat
+            .SelectMany(m => m.AccountShares.Select(s => s.AccountId))
+            .Distinct()
+            .ToList();
+        if (shareAccountIds.Count > 0)
+        {
+            var shareAccounts = await _context.Accounts
+                .IgnoreQueryFilters()
+                .Where(a => shareAccountIds.Contains(a.AccountId))
+                .ToDictionaryAsync(a => a.AccountId, ct);
+            foreach (var sAccId in shareAccountIds)
+            {
+                if (!shareAccounts.TryGetValue(sAccId, out var sAcc))
+                    return (false, "أحد الحسابات المختارة غير صحيح أو غير موجود", null);
+                if (!sAcc.IsActive)
+                    return (false, $"لا يمكن استخدام الحساب '{sAcc.AccountNameAr}' لأنه معطل حالياً.", null);
+            }
+        }
+
+        var itemsWithShare = new List<(Moqaysa Moqaysa, decimal SharePercentage)>();
+        var conflictJobOrders = new List<string>();
+        foreach (var m in moqaysat)
+        {
+            var otherAccs = otherActiveAccountIdsByMoqaysa.GetValueOrDefault(m.MoqaysaId);
+            if (m.AccountShares.Count == 0)
+            {
+                if (otherAccs != null && otherAccs.Count > 0)
+                    conflictJobOrders.Add(m.JobOrderNumber);
+                else
+                    itemsWithShare.Add((m, 100m));
+            }
+            else
+            {
+                decimal availablePct = m.AccountShares
+                    .Where(s => s.SharePercentage > 0m && (otherAccs == null || !otherAccs.Contains(s.AccountId)))
+                    .Sum(s => s.SharePercentage);
+                if (availablePct <= 0m)
+                    conflictJobOrders.Add(m.JobOrderNumber);
+                else
+                    itemsWithShare.Add((m, Math.Abs(availablePct - 100m) <= 0.05m ? 100m : availablePct));
+            }
+        }
+
+        if (conflictJobOrders.Count > 0)
+            return (false, $"إحدى المقايسات المحددة (إذن تشغيل: {string.Join(" ، ", conflictJobOrders.Distinct())}) مُدرجة بالفعل في كشف تسوية آخر نشط.", null);
+
+        var distinctNewShareAccountIds = moqaysat
+            .SelectMany(m => m.AccountShares.Select(s => s.AccountId))
+            .Distinct()
+            .ToList();
+        int primaryAccountId = distinctNewShareAccountIds.Count == 0 || distinctNewShareAccountIds.Contains(dto.AccountId)
+            ? dto.AccountId
+            : distinctNewShareAccountIds[0];
 
         var totals = CalculateTotals(itemsWithShare, dto.OverrideMarkupPercent);
         string tafqeet = _tafqeetService.ToWords(totals.SettlementGrandTotal);
@@ -665,27 +838,26 @@ public class TasweyaService : ITasweyaService
 
         Action applyUpdate = () =>
         {
-            int previousAccountId = tasweya.AccountId;
-            // Release old moqaysat shares belonging to the previous account
-            var oldMoqaysaIds = tasweya.MoqaysaLinks.Select(ml => ml.MoqaysaId).Distinct().ToList();
+            // Release shares of old moqaysat not covered by any other active tasweya
             var oldMoqaysat = _context.Moqaysat
                 .Include(m => m.AccountShares)
                 .Where(m => oldMoqaysaIds.Contains(m.MoqaysaId))
                 .ToList();
             foreach (var om in oldMoqaysat)
             {
-                var oldShare = om.AccountShares.FirstOrDefault(s => s.AccountId == previousAccountId);
-                if (oldShare != null)
+                var otherAccs = otherActiveAccountIdsByMoqaysa.GetValueOrDefault(om.MoqaysaId);
+                foreach (var oldShare in om.AccountShares)
                 {
-                    oldShare.IsIncludedInTasweya = false;
+                    if (otherAccs == null || !otherAccs.Contains(oldShare.AccountId))
+                        oldShare.IsIncludedInTasweya = false;
                 }
-                SyncMoqaysaTasweyaFlag(om, fallbackWhenNoShares: false);
+                SyncMoqaysaTasweyaFlag(om, fallbackWhenNoShares: otherAccs != null && otherAccs.Count > 0);
             }
             _context.TasweyaMoqaysaLinks.RemoveRange(tasweya.MoqaysaLinks);
 
             tasweya.SettlementNumber = finalSettlementNumber;
             tasweya.SettlementDate = dto.SettlementDate;
-            tasweya.AccountId = dto.AccountId;
+            tasweya.AccountId = primaryAccountId;
             tasweya.CustomerId = dto.CustomerId;
             tasweya.ClaimNumber = string.IsNullOrWhiteSpace(dto.ClaimNumber) ? finalSettlementNumber : dto.ClaimNumber.Trim();
             tasweya.JobOrderNumbersText = jobOrders;
@@ -706,10 +878,11 @@ public class TasweyaService : ITasweyaService
 
             foreach (var m in moqaysat)
             {
-                var newShare = m.AccountShares.FirstOrDefault(s => s.AccountId == dto.AccountId);
-                if (newShare != null)
+                var otherAccs = otherActiveAccountIdsByMoqaysa.GetValueOrDefault(m.MoqaysaId);
+                foreach (var share in m.AccountShares)
                 {
-                    newShare.IsIncludedInTasweya = true;
+                    if (otherAccs == null || !otherAccs.Contains(share.AccountId))
+                        share.IsIncludedInTasweya = true;
                 }
                 SyncMoqaysaTasweyaFlag(m, fallbackWhenNoShares: true);
                 tasweya.MoqaysaLinks.Add(new TasweyaMoqaysaLink
@@ -767,6 +940,20 @@ public class TasweyaService : ITasweyaService
             .Where(m => moqaysaIds.Contains(m.MoqaysaId))
             .ToListAsync(ct);
 
+        var otherActiveLinks = await _context.TasweyaMoqaysaLinks
+            .IgnoreQueryFilters()
+            .Include(link => link.Moqaysa)
+            .Include(link => link.Tasweya)
+            .Where(link => moqaysaIds.Contains(link.MoqaysaId)
+                        && link.TasweyaId != item.TasweyaId
+                        && link.Tasweya != null
+                        && link.Tasweya.IsActive)
+            .ToListAsync(ct);
+
+        var otherActiveAccountIdsByMoqaysa = otherActiveLinks
+            .GroupBy(l => l.MoqaysaId)
+            .ToDictionary(g => g.Key, g => g.Select(x => x.Tasweya!.AccountId).ToHashSet());
+
         if (item.IsActive)
         {
             if (item.IsPaid)
@@ -782,12 +969,20 @@ public class TasweyaService : ITasweyaService
             {
                 foreach (var m in linkedMoqaysat)
                 {
-                    var share = m.AccountShares.FirstOrDefault(s => s.AccountId == item.AccountId);
-                    if (share != null)
+                    var otherAccs = otherActiveAccountIdsByMoqaysa.GetValueOrDefault(m.MoqaysaId);
+                    if (otherAccs == null || otherAccs.Count == 0)
                     {
-                        share.IsIncludedInTasweya = false;
+                        foreach (var share in m.AccountShares)
+                            share.IsIncludedInTasweya = false;
+                        SyncMoqaysaTasweyaFlag(m, fallbackWhenNoShares: false);
                     }
-                    SyncMoqaysaTasweyaFlag(m, fallbackWhenNoShares: false);
+                    else
+                    {
+                        var share = m.AccountShares.FirstOrDefault(s => s.AccountId == item.AccountId);
+                        if (share != null)
+                            share.IsIncludedInTasweya = false;
+                        SyncMoqaysaTasweyaFlag(m, fallbackWhenNoShares: true);
+                    }
                 }
 
                 item.IsActive = false;
@@ -810,37 +1005,38 @@ public class TasweyaService : ITasweyaService
                 await _context.SaveChangesAsync(ct);
             }
 
-            return (true, "تم إلغاء تفعيل كشف التسوية وتحرير حصص المقايسات التابعة لهذا الحساب بنجاح", false);
+            return (true, "تم إلغاء تفعيل كشف التسوية وتحرير مقايساته بنجاح", false);
         }
         else
         {
-            var alreadyIncludedInActive = await _context.TasweyaMoqaysaLinks
-                .IgnoreQueryFilters()
-                .Include(link => link.Moqaysa)
-                .Include(link => link.Tasweya)
-                .Where(link => moqaysaIds.Contains(link.MoqaysaId)
-                            && link.TasweyaId != item.TasweyaId
-                            && link.Tasweya != null
-                            && link.Tasweya.IsActive
-                            && link.Tasweya.AccountId == item.AccountId)
-                .Select(link => link.Moqaysa != null ? link.Moqaysa.JobOrderNumber : "")
-                .Where(jobNo => !string.IsNullOrEmpty(jobNo))
+            var conflictJobOrders = linkedMoqaysat
+                .Where(m =>
+                {
+                    var otherAccs = otherActiveAccountIdsByMoqaysa.GetValueOrDefault(m.MoqaysaId);
+                    if (otherAccs == null || otherAccs.Count == 0) return false;
+                    if (m.AccountShares.Count == 0) return true;
+                    // Conflict if the other active tasweya holds the target account OR the other active tasweya already unified all shares
+                    return m.IsIncludedInTasweya || otherAccs.Contains(item.AccountId);
+                })
+                .Select(m => m.JobOrderNumber)
+                .Where(j => !string.IsNullOrEmpty(j))
                 .Distinct()
-                .ToListAsync(ct);
+                .ToList();
 
-            if (alreadyIncludedInActive.Count > 0)
+            if (conflictJobOrders.Count > 0)
             {
-                return (false, $"لا يمكن إعادة تفعيل كشف التسوية؛ نظراً لأن المقايسات ذات أذون التشغيل ({string.Join(" ، ", alreadyIncludedInActive)}) تم إدراجها بالفعل لهذا الحساب في كشف تسوية آخر نشط.", null);
+                return (false, $"لا يمكن إعادة تفعيل كشف التسوية؛ نظراً لأن المقايسات ذات أذون التشغيل ({string.Join(" ، ", conflictJobOrders)}) تم إدراجها بالفعل في كشف تسوية آخر نشط.", null);
             }
 
             Action applyReactivate = () =>
             {
                 foreach (var m in linkedMoqaysat)
                 {
-                    var share = m.AccountShares.FirstOrDefault(s => s.AccountId == item.AccountId);
-                    if (share != null)
+                    var otherAccs = otherActiveAccountIdsByMoqaysa.GetValueOrDefault(m.MoqaysaId);
+                    foreach (var share in m.AccountShares)
                     {
-                        share.IsIncludedInTasweya = true;
+                        if (otherAccs == null || !otherAccs.Contains(share.AccountId))
+                            share.IsIncludedInTasweya = true;
                     }
                     SyncMoqaysaTasweyaFlag(m, fallbackWhenNoShares: true);
                 }
@@ -865,46 +1061,165 @@ public class TasweyaService : ITasweyaService
                 await _context.SaveChangesAsync(ct);
             }
 
-            return (true, "تم إعادة تفعيل كشف التسوية وربط حصص المقايسات التابعة له بنجاح", true);
+            return (true, "تم إعادة تفعيل كشف التسوية وربط مقايساته بنجاح", true);
         }
     }
 
     public async Task<byte[]?> ExportWordAsync(int id, CancellationToken ct = default)
     {
-        var item = await _context.Tasweyat
-            .AsNoTracking()
-            .Include(t => t.Account)
-            .Include(t => t.Customer)
-            .FirstOrDefaultAsync(t => t.TasweyaId == id, ct);
-
-        if (item == null) return null;
-
-        return _wordExportService.ExportTasweyaToWord(item);
+        try
+        {
+            var doc = await _documentService.RenderTasweyaAsync(id, CentralPress.API.Documents.DocFormat.Docx, ct);
+            return doc.Bytes;
+        }
+        catch (KeyNotFoundException)
+        {
+            return null;
+        }
     }
 
     public async Task<byte[]?> ExportPdfAsync(int id, CancellationToken ct = default)
     {
-        var item = await _context.Tasweyat
+        try
+        {
+            var doc = await _documentService.RenderTasweyaAsync(id, CentralPress.API.Documents.DocFormat.Pdf, ct);
+            return doc.Bytes;
+        }
+        catch (KeyNotFoundException)
+        {
+            return null;
+        }
+    }
+
+    private async Task<Tasweya?> LoadTasweyaForExportAsync(int id, CancellationToken ct) =>
+        await _context.Tasweyat
+            .IgnoreQueryFilters()
             .AsNoTracking()
             .Include(t => t.Account)
             .Include(t => t.Customer)
+            .Include(t => t.MoqaysaLinks)
+                .ThenInclude(ml => ml.Moqaysa)
+                    .ThenInclude(m => m!.AccountShares)
+                        .ThenInclude(s => s.Account)
             .FirstOrDefaultAsync(t => t.TasweyaId == id, ct);
 
-        if (item == null) return null;
+    private async Task<(List<TasweyaAccountShareViewModel> Shares, TasweyaCalculatedTotals Totals, string Words)> ResolveViewTotalsAndSharesAsync(
+        Tasweya t,
+        CancellationToken ct = default)
+    {
+        var linkedMoqaysat = t.MoqaysaLinks
+            .Where(ml => ml.Moqaysa != null)
+            .Select(ml => ml.Moqaysa!)
+            .GroupBy(m => m.MoqaysaId)
+            .Select(g => g.First())
+            .ToList();
 
-        return _pdfExportService.ExportTasweyaToPdf(item);
+        var sharesAcrossMoqaysat = linkedMoqaysat
+            .Where(m => m.AccountShares != null && m.AccountShares.Any())
+            .SelectMany(m => m.AccountShares)
+            .GroupBy(s => s.AccountId)
+            .Select(g =>
+            {
+                var first = g.First();
+                var accName = first.Account?.AccountNameAr ?? (first.AccountId == t.AccountId ? (t.Account?.AccountNameAr ?? "غير محدد") : $"حساب #{first.AccountId}");
+                var totalAllocated = g.Sum(x => x.AllocatedAmount);
+                return new TasweyaAccountShareViewModel
+                {
+                    AccountId = g.Key,
+                    AccountNameAr = accName,
+                    SharePercentage = first.SharePercentage,
+                    AllocatedAmount = totalAllocated > 0 ? totalAllocated : t.SettlementGrandTotal
+                };
+            }).ToList();
+
+        if (!sharesAcrossMoqaysat.Any() && t.Account != null)
+        {
+            sharesAcrossMoqaysat.Add(new TasweyaAccountShareViewModel
+            {
+                AccountId = t.AccountId,
+                AccountNameAr = t.Account.AccountNameAr,
+                SharePercentage = 100m,
+                AllocatedAmount = t.SettlementGrandTotal
+            });
+        }
+
+        if (sharesAcrossMoqaysat.Count > 1 && linkedMoqaysat.Count > 0)
+        {
+            var linkedIds = linkedMoqaysat.Select(m => m.MoqaysaId).ToList();
+            bool hasOtherActiveTasweya = t.TasweyaId > 0 && linkedIds.Count > 0 &&
+                await _context.TasweyaMoqaysaLinks
+                    .AsNoTracking()
+                    .AnyAsync(l => linkedIds.Contains(l.MoqaysaId)
+                                && l.TasweyaId != t.TasweyaId
+                                && l.Tasweya != null
+                                && l.Tasweya.IsActive, ct);
+            bool allSharesSettled = linkedMoqaysat.All(m =>
+                m.AccountShares.Count == 0 || m.AccountShares.All(s => s.IsIncludedInTasweya));
+
+            if (!hasOtherActiveTasweya && allSharesSettled && t.SettlementGrandTotal > 0m)
+            {
+                ScaleSharesToTargetTotal(sharesAcrossMoqaysat, t.SettlementGrandTotal);
+                return (sharesAcrossMoqaysat, BuildStoredTotals(t), t.TotalAmountInWordsAr);
+            }
+
+            var fullTotals = CalculateTotals(linkedMoqaysat.Select(m => (m, 100m)).ToList(), null);
+            ScaleSharesToTargetTotal(sharesAcrossMoqaysat, fullTotals.SettlementGrandTotal);
+            return (sharesAcrossMoqaysat, fullTotals, _tafqeetService.ToWords(fullTotals.SettlementGrandTotal));
+        }
+
+        return (sharesAcrossMoqaysat, BuildStoredTotals(t), t.TotalAmountInWordsAr);
     }
 
-    private static decimal ResolveSharePercentage(Moqaysa m, int accountId)
+    private static void ScaleSharesToTargetTotal(List<TasweyaAccountShareViewModel> shares, decimal targetTotal)
     {
-        var share = m.AccountShares.FirstOrDefault(s => s.AccountId == accountId);
-        if (share != null)
-            return share.SharePercentage;
+        if (shares.Count == 0) return;
+        decimal rawSum = shares.Sum(s => s.AllocatedAmount);
+        if (rawSum > 0m && Math.Abs(rawSum - targetTotal) > 0.001m)
+        {
+            foreach (var s in shares)
+                s.AllocatedAmount = MoqaysaCalculationService.Round2(targetTotal * (s.AllocatedAmount / rawSum));
+        }
 
-        if (m.AccountShares.Count == 0 && m.Customer?.AccountId == accountId)
-            return 100m;
+        decimal scaledSum = shares.Sum(s => s.AllocatedAmount);
+        if (scaledSum != targetTotal)
+        {
+            shares[^1].AllocatedAmount = MoqaysaCalculationService.Round2(
+                shares[^1].AllocatedAmount + (targetTotal - scaledSum));
+        }
+    }
 
-        return 0m;
+    private static TasweyaCalculatedTotals BuildStoredTotals(Tasweya t) => new()
+    {
+        TotalMaterialsSum = t.TotalMaterialsSum,
+        TotalWorkerWagesSum = t.TotalWorkerWagesSum,
+        TotalMachineCostsSum = t.TotalMachineCostsSum,
+        AdminExpensesSum = t.AdminExpensesSum,
+        MarkupAmountSum = t.MarkupAmountSum,
+        MinistryOfFinanceSum = t.MinistryOfFinanceSum,
+        WorkersFundSum = t.WorkersFundSum,
+        OtherAmountSum = t.OtherAmountSum,
+        RevenuesTotal = t.RevenuesTotal,
+        VatTotal = t.VatTotal,
+        SettlementGrandTotal = t.SettlementGrandTotal
+    };
+
+    private async Task ApplyFullMoqaysatTotalsIfMultiAccountAsync(Tasweya t, CancellationToken ct)
+    {
+        var (shares, totals, words) = await ResolveViewTotalsAndSharesAsync(t, ct);
+        if (shares.Count <= 1) return;
+
+        t.TotalMaterialsSum = totals.TotalMaterialsSum;
+        t.TotalWorkerWagesSum = totals.TotalWorkerWagesSum;
+        t.TotalMachineCostsSum = totals.TotalMachineCostsSum;
+        t.AdminExpensesSum = totals.AdminExpensesSum;
+        t.MarkupAmountSum = totals.MarkupAmountSum;
+        t.MinistryOfFinanceSum = totals.MinistryOfFinanceSum;
+        t.WorkersFundSum = totals.WorkersFundSum;
+        t.OtherAmountSum = totals.OtherAmountSum;
+        t.RevenuesTotal = totals.RevenuesTotal;
+        t.VatTotal = totals.VatTotal;
+        t.SettlementGrandTotal = totals.SettlementGrandTotal;
+        t.TotalAmountInWordsAr = words;
     }
 
     private static void SyncMoqaysaTasweyaFlag(Moqaysa m, bool fallbackWhenNoShares)

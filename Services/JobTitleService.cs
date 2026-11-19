@@ -27,6 +27,7 @@ public class JobTitleService : IJobTitleService
     public async Task<List<JobTitleSummaryViewModel>> GetAllAsync(CancellationToken cancellationToken = default)
     {
         return await _context.JobTitles
+            .IgnoreQueryFilters()
             .OrderBy(j => j.JobTitleId)
             .Select(j => new JobTitleSummaryViewModel
             {

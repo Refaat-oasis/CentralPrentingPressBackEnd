@@ -1,0 +1,63 @@
+using System.Globalization;
+
+namespace CentralPress.API.Documents;
+
+public static class MoqaysaTokens
+{
+    public const int MachinerySlots = 11;
+    public const int MaterialSlots = 25;
+
+    public static Dictionary<string, object?> Build(MoqaysaPrintData d)
+    {
+        if (d.Machinery.Count > MachinerySlots)
+            throw new PrintDataException($"The moqaysa template supports {MachinerySlots} machinery rows; found {d.Machinery.Count}.");
+        if (d.Materials.Count > MaterialSlots)
+            throw new PrintDataException($"The moqaysa template supports {MaterialSlots} material lines; found {d.Materials.Count}.");
+
+        static Dictionary<string, object?> Row(string name, decimal hours, decimal rate, decimal value) => new()
+        {
+            ["Name"] = name,
+            ["Hours"] = hours == 0 ? "" : hours.ToString("0.##", CultureInfo.InvariantCulture),
+            ["Rate"] = hours == 0 ? null : rate,
+            ["Value"] = hours == 0 ? null : value
+        };
+
+        return new Dictionary<string, object?>
+        {
+            ["JobOrderNo"] = d.JobOrderNo,
+            ["Requester"] = d.Requester,
+            ["Quantity"] = d.Quantity,
+            ["UnitPrice"] = d.UnitPrice,
+            ["Specs"] = !string.IsNullOrEmpty(d.Specs) && d.Specs.Length > 150 ? d.Specs[..150] : (d.Specs ?? string.Empty),
+            ["Labour"] = d.Machinery.Select(m => (object?)Row(m.Name, m.Hours, m.WorkerRate, m.WorkerValue)).ToList(),
+            ["Machinery"] = d.Machinery.Select(m => (object?)Row(m.Name, m.MachineHours, m.MachineRate, m.MachineValue)).ToList(),
+            ["Mat"] = d.Materials.Select(m => (object?)new Dictionary<string, object?>
+            {
+                ["Name"] = m.Name,
+                ["Qty"] = m.Qty.ToString("0.##", CultureInfo.InvariantCulture),
+                ["Price"] = m.Price,
+                ["Total"] = m.Total
+            }).ToList(),
+            ["LabourTotal"] = d.LabourTotal,
+            ["MachineryTotal"] = d.MachineryTotal,
+            ["MatGross"] = d.MatGross,
+            ["MatReturns"] = d.MatReturns,
+            ["MatNet"] = d.MatNet,
+            ["OpsMaterials"] = d.OpsMaterials,
+            ["OpsFilms"] = d.OpsFilms,
+            ["MaterialsTotal"] = d.MaterialsTotal,
+            ["DirectCost"] = d.DirectCost,
+            ["Admin"] = d.Admin,
+            ["ExpensesTotal"] = d.ExpensesTotal,
+            ["Percentage"] = d.Percentage,
+            ["Subtotal"] = d.Subtotal,
+            ["Ministry"] = d.Ministry,
+            ["WorkersFund"] = d.WorkersFund,
+            ["TotalA"] = d.TotalA,
+            ["Other"] = d.Other,
+            ["Revenue"] = d.Revenue,
+            ["VAT"] = d.Vat,
+            ["Total"] = d.Total
+        };
+    }
+}

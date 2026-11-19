@@ -19,17 +19,20 @@ public class MoqaysaService : IMoqaysaService
     private readonly MoqaysaCalculationService _calculationService;
     private readonly WordExportService _wordExportService;
     private readonly PdfExportService _pdfExportService;
+    private readonly CentralPress.API.Documents.DocumentService _documentService;
 
     public MoqaysaService(
         ApplicationDbContext context,
         MoqaysaCalculationService calculationService,
         WordExportService wordExportService,
-        PdfExportService pdfExportService)
+        PdfExportService pdfExportService,
+        CentralPress.API.Documents.DocumentService documentService)
     {
         _context = context;
         _calculationService = calculationService;
         _wordExportService = wordExportService;
         _pdfExportService = pdfExportService;
+        _documentService = documentService;
     }
 
     public static decimal ParseQuantity(string? text)
@@ -211,6 +214,7 @@ public class MoqaysaService : IMoqaysaService
                 .ThenInclude(c => c!.Account)
             .Include(x => x.MaterialItems)
             .Include(x => x.MachineryItems)
+                .ThenInclude(mi => mi.Machinery)
             .Include(x => x.AccountShares)
                 .ThenInclude(s => s.Account)
             .FirstOrDefaultAsync(x => x.MoqaysaId == id, ct);
@@ -227,12 +231,17 @@ public class MoqaysaService : IMoqaysaService
         }
 
         var customer = await _context.Customers
+            .IgnoreQueryFilters()
             .Include(c => c.Account)
             .FirstOrDefaultAsync(c => c.CustomerId == dto.CustomerId, ct);
         if (customer == null)
             throw new InvalidOperationException("الجهة الطالبة غير موجودة");
+        if (!customer.IsActive)
+            throw new InvalidOperationException($"لا يمكن استخدام الجهة الطالبة ({customer.CustomerNameAr}) لأنها معطلة حالياً");
 
-        // Validate machinery maintenance status (MED-11)
+        await ValidateMaterialsActiveAsync(dto.MaterialItems, ct);
+
+        // Validate machinery active & maintenance status (MED-11)
         await ValidateMachineriesOperationalAsync(dto.MachineryItems, ct);
 
         var calc = await PerformCalculationInternalAsync(dto, ct);
@@ -327,6 +336,7 @@ public class MoqaysaService : IMoqaysaService
     {
         ArgumentNullException.ThrowIfNull(dto);
         var moqaysa = await _context.Moqaysat
+            .IgnoreQueryFilters()
             .Include(m => m.Customer)
                 .ThenInclude(c => c!.Account)
             .Include(m => m.MaterialItems)
@@ -336,10 +346,23 @@ public class MoqaysaService : IMoqaysaService
 
         if (moqaysa == null) return null;
 
+        if (!moqaysa.IsActive)
+            throw new InvalidOperationException("لا يمكن تعديل مقايسة معطلة؛ يرجى إعادة تفعيلها أولاً.");
+
         if (moqaysa.IsIncludedInTasweya || moqaysa.AccountShares.Any(s => s.IsIncludedInTasweya))
             throw new InvalidOperationException("لا يمكن تعديل المقايسة لأنها مُدرجة بالفعل (أو إحدى حصصها المالية مُدرجة) في كشف تسوية / مطالبة رسمية");
 
-        // Validate machinery maintenance status (MED-11)
+        var customer = await _context.Customers
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(c => c.CustomerId == dto.CustomerId, ct);
+        if (customer == null)
+            throw new InvalidOperationException("الجهة الطالبة غير موجودة");
+        if (!customer.IsActive)
+            throw new InvalidOperationException($"لا يمكن استخدام الجهة الطالبة ({customer.CustomerNameAr}) لأنها معطلة حالياً");
+
+        await ValidateMaterialsActiveAsync(dto.MaterialItems, ct);
+
+        // Validate machinery active & maintenance status (MED-11)
         await ValidateMachineriesOperationalAsync(dto.MachineryItems, ct);
 
         var calc = await PerformCalculationInternalAsync(dto, ct);
@@ -454,7 +477,7 @@ public class MoqaysaService : IMoqaysaService
                 throw new InvalidOperationException($"مجموع نسب الحسابات الدافعة يجب أن يساوي 100%. المجموع الحالي: {totalPct}%");
 
             var existingCount = await _context.Accounts
-                .CountAsync(a => requestedIds.Contains(a.AccountId), ct);
+                .CountAsync(a => a.IsActive && requestedIds.Contains(a.AccountId), ct);
             if (existingCount != requestedIds.Count)
                 throw new InvalidOperationException("أحد الحسابات المحاسبية المحددة غير موجود أو معطل.");
 
@@ -491,24 +514,28 @@ public class MoqaysaService : IMoqaysaService
 
     public async Task<byte[]?> ExportWordAsync(int id, CancellationToken ct = default)
     {
-        var item = await _context.Moqaysat
-            .Include(m => m.Customer)
-            .Include(m => m.MaterialItems)
-            .Include(m => m.MachineryItems)
-            .FirstOrDefaultAsync(m => m.MoqaysaId == id, ct);
-
-        return item == null ? null : _wordExportService.ExportMoqaysaToWord(item);
+        try
+        {
+            var doc = await _documentService.RenderMoqaysaAsync(id, CentralPress.API.Documents.DocFormat.Docx, ct);
+            return doc.Bytes;
+        }
+        catch (KeyNotFoundException)
+        {
+            return null;
+        }
     }
 
     public async Task<byte[]?> ExportPdfAsync(int id, CancellationToken ct = default)
     {
-        var item = await _context.Moqaysat
-            .Include(m => m.Customer)
-            .Include(m => m.MaterialItems)
-            .Include(m => m.MachineryItems)
-            .FirstOrDefaultAsync(m => m.MoqaysaId == id, ct);
-
-        return item == null ? null : _pdfExportService.ExportMoqaysaToPdf(item);
+        try
+        {
+            var doc = await _documentService.RenderMoqaysaAsync(id, CentralPress.API.Documents.DocFormat.Pdf, ct);
+            return doc.Bytes;
+        }
+        catch (KeyNotFoundException)
+        {
+            return null;
+        }
     }
 
     private async Task<MoqaysaCalculationResult> PerformCalculationInternalAsync(MoqaysaSaveDto dto, CancellationToken ct)
@@ -558,6 +585,31 @@ public class MoqaysaService : IMoqaysaService
         return _calculationService.Calculate(input);
     }
 
+    private async Task ValidateMaterialsActiveAsync(List<MaterialItemInputDto> materialItems, CancellationToken ct)
+    {
+        var linkedMaterialIds = materialItems
+            .Where(m => m.MaterialId.HasValue && m.MaterialId.Value > 0)
+            .Select(m => m.MaterialId!.Value)
+            .Distinct()
+            .ToList();
+
+        if (linkedMaterialIds.Count == 0) return;
+
+        var materials = await _context.Materials
+            .IgnoreQueryFilters()
+            .Where(m => linkedMaterialIds.Contains(m.MaterialId))
+            .ToListAsync(ct);
+
+        foreach (var matId in linkedMaterialIds)
+        {
+            var mat = materials.FirstOrDefault(m => m.MaterialId == matId);
+            if (mat == null)
+                throw new InvalidOperationException($"الخامة برقم ({matId}) غير موجودة.");
+            if (!mat.IsActive)
+                throw new InvalidOperationException($"لا يمكن استخدام الخامة '{mat.MaterialNameAr}' لأنها معطلة حالياً.");
+        }
+    }
+
     private async Task ValidateMachineriesOperationalAsync(List<MachineryItemInputDto> machineryItems, CancellationToken ct)
     {
         var scheduled = machineryItems
@@ -568,20 +620,23 @@ public class MoqaysaService : IMoqaysaService
 
         var macIds = scheduled.Select(m => m.MachineryId).Distinct().ToList();
         var machineries = await _context.Machineries
+            .IgnoreQueryFilters()
             .Where(m => macIds.Contains(m.MachineryId))
             .ToListAsync(ct);
 
         foreach (var item in scheduled)
         {
             var mac = machineries.FirstOrDefault(m => m.MachineryId == item.MachineryId);
-            if (mac != null)
+            if (mac == null)
+                throw new InvalidOperationException($"الماكينة / بند العمالة برقم ({item.MachineryId}) غير موجود.");
+            if (!mac.IsActive)
+                throw new InvalidOperationException(
+                    $"لا يمكن استخدام '{mac.MachineryNameAr}' لأنها معطلة حالياً.");
+            if (string.Equals(mac.MaintenanceStatus, "UnderMaintenance", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(mac.MaintenanceStatus, "OutOfService", StringComparison.OrdinalIgnoreCase))
             {
-                if (string.Equals(mac.MaintenanceStatus, "UnderMaintenance", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(mac.MaintenanceStatus, "OutOfService", StringComparison.OrdinalIgnoreCase))
-                {
-                    throw new InvalidOperationException(
-                        $"لا يمكن جدولة ساعات تشغيل على الآلة '{mac.MachineryNameAr}' لأن حالتها الحالية: {mac.MaintenanceStatus}");
-                }
+                throw new InvalidOperationException(
+                    $"لا يمكن جدولة ساعات تشغيل على الآلة '{mac.MachineryNameAr}' لأن حالتها الحالية: {mac.MaintenanceStatus}");
             }
         }
     }
@@ -662,18 +717,21 @@ public class MoqaysaService : IMoqaysaService
                 UnitPrice = mat.UnitPrice,
                 TotalPrice = mat.TotalPrice
             }).ToList(),
-            MachineryItems = m.MachineryItems.Select(mac => new MoqaysaMachineryItemViewModel
-            {
-                ItemId = mac.OperationId,
-                MoqaysaId = mac.MoqaysaId,
-                MachineryId = mac.MachineryId,
-                MachineryNameSnapshot = mac.MachineryNameSnapshot,
-                Hours = mac.Hours,
-                WorkerHourlyRateSnapshot = mac.WorkerHourlyRateSnapshot,
-                TotalWorkerWages = mac.TotalWorkerWages,
-                MachineHourlyRateSnapshot = mac.MachineHourlyRateSnapshot,
-                TotalMachineOperatingCost = mac.TotalMachineOperatingCost
-            }).ToList(),
+            MachineryItems = m.MachineryItems
+                .OrderBy(mac => mac.Machinery != null ? mac.Machinery.DisplayOrder : int.MaxValue)
+                .ThenBy(mac => mac.MachineryId)
+                .Select(mac => new MoqaysaMachineryItemViewModel
+                {
+                    ItemId = mac.OperationId,
+                    MoqaysaId = mac.MoqaysaId,
+                    MachineryId = mac.MachineryId,
+                    MachineryNameSnapshot = mac.MachineryNameSnapshot,
+                    Hours = mac.Hours,
+                    WorkerHourlyRateSnapshot = mac.WorkerHourlyRateSnapshot,
+                    TotalWorkerWages = mac.TotalWorkerWages,
+                    MachineHourlyRateSnapshot = mac.MachineHourlyRateSnapshot,
+                    TotalMachineOperatingCost = mac.TotalMachineOperatingCost
+                }).ToList(),
             AccountShares = m.AccountShares.Select(s => new MoqaysaAccountShareViewModel
             {
                 ShareId = s.ShareId,
