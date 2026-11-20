@@ -23,19 +23,25 @@ public class PaymentOrderService : IPaymentOrderService
     private readonly PdfExportService _pdfExportService;
     private readonly ITafqeetService _tafqeetService;
     private readonly IAuditLogService _auditLogService;
+    private readonly CentralPress.API.Documents.PdfConverter _pdfConverter;
+    private readonly Microsoft.Extensions.Logging.ILogger<PaymentOrderService> _logger;
 
     public PaymentOrderService(
         ApplicationDbContext context,
         WordExportService wordExportService,
         PdfExportService pdfExportService,
         ITafqeetService tafqeetService,
-        IAuditLogService auditLogService)
+        IAuditLogService auditLogService,
+        CentralPress.API.Documents.PdfConverter pdfConverter,
+        Microsoft.Extensions.Logging.ILogger<PaymentOrderService> logger)
     {
         _context = context;
         _wordExportService = wordExportService;
         _pdfExportService = pdfExportService;
         _tafqeetService = tafqeetService;
         _auditLogService = auditLogService;
+        _pdfConverter = pdfConverter;
+        _logger = logger;
     }
 
     public async Task<List<UnpaidTasweyaViewModel>> GetUnpaidTasweyatAsync(
@@ -1310,7 +1316,16 @@ public class PaymentOrderService : IPaymentOrderService
 
         if (item == null) return null;
 
-        return _pdfExportService.ExportPaymentOrderToPdf(item);
+        try
+        {
+            var wordBytes = _wordExportService.ExportPaymentOrderToWord(item);
+            return await _pdfConverter.ToPdfAsync(wordBytes, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "LibreOffice DOCX-to-PDF conversion failed for Payment Order #{Id}. Falling back to QuestPDF generator.", id);
+            return _pdfExportService.ExportPaymentOrderToPdf(item);
+        }
     }
 
     private static string GetStatusTextAr(PaymentOrderStatus status) => status switch
