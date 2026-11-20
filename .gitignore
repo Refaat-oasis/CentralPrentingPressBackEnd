@@ -24,10 +24,15 @@ PublishProfiles/
 *.pubxml
 
 ## Environment & sensitive secrets
+appsettings.json
+appsettings.*.json
+!appsettings.Production.template.json
+!appsettings.example.json
 appsettings.Development.json
 appsettings.Production.json
 appsettings.*.local.json
 *.local.json
+*.bak
 
 ## Database & SQLite files
 *.db
@@ -43,7 +48,5 @@ appsettings.*.local.json
 *.dmp
 *.crash
 
- 
 ## Office lock files
 ~$*
-

@@ -45,14 +45,14 @@ if (builder.Configuration["UseInMemoryDatabase"] == "true")
 else
 {
     var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-    if (string.IsNullOrWhiteSpace(connectionString))
-    {
-        if (isProdLike)
-        {
-            throw new InvalidOperationException("ConnectionStrings:DefaultConnection must be configured in Production.");
-        }
-        connectionString = "Server=localhost;Database=AssiutCentralPressDb;Trusted_Connection=True;MultipleActiveResultSets=true;TrustServerCertificate=True;";
-    }
+    //if (string.IsNullOrWhiteSpace(connectionString))
+    //{
+    //    if (isProdLike)
+    //    {
+    //        throw new InvalidOperationException("ConnectionStrings:DefaultConnection must be configured in Production.");
+    //    }
+    //    connectionString = "Server=localhost;Database=AssiutCentralPressDb;Trusted_Connection=True;MultipleActiveResultSets=true;TrustServerCertificate=True;";
+    //}
 
     builder.Services.AddDbContext<ApplicationDbContext>(options =>
         options.UseSqlServer(connectionString, sqlOptions =>
