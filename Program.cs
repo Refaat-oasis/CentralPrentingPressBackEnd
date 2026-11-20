@@ -55,10 +55,13 @@ else
     //}
 
     builder.Services.AddDbContext<ApplicationDbContext>(options =>
+    {
         options.UseSqlServer(connectionString, sqlOptions =>
         {
             sqlOptions.CommandTimeout(60);
-        }));
+        });
+        options.ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
+    });
 }
 
 // 2. Identity Configuration with Enterprise Password Complexity & Lockout

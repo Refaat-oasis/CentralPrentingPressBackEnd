@@ -278,12 +278,52 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
         builder.Entity<RolePermission>().HasQueryFilter(p => p.JobTitle!.IsActive && p.Module!.IsActive);
         builder.Entity<UserPermissionOverride>().HasQueryFilter(o => o.Module!.IsActive);
 
-        // 10. MoqaysaAccountShare configuration
+        // 10. Configure relationships with soft-deleted principals as optional to prevent EF Core warning 10622
         builder.Entity<MoqaysaAccountShare>(entity =>
         {
-            entity.HasOne(s => s.Moqaysa).WithMany(m => m.AccountShares).HasForeignKey(s => s.MoqaysaId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(s => s.Account).WithMany().HasForeignKey(s => s.AccountId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(s => s.Moqaysa)
+                .WithMany(m => m.AccountShares)
+                .HasForeignKey(s => s.MoqaysaId)
+                .IsRequired(false)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(s => s.Account)
+                .WithMany()
+                .HasForeignKey(s => s.AccountId)
+                .IsRequired(false)
+                .OnDelete(DeleteBehavior.Restrict);
+
             entity.HasIndex(s => new { s.MoqaysaId, s.AccountId }).IsUnique();
+        });
+
+        builder.Entity<MoqaysaMachineryItem>(entity =>
+        {
+            entity.HasOne(x => x.Moqaysa)
+                .WithMany(m => m.MachineryItems)
+                .HasForeignKey(x => x.MoqaysaId)
+                .IsRequired(false)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Machinery)
+                .WithMany()
+                .HasForeignKey(x => x.MachineryId)
+                .IsRequired(false)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<MoqaysaMaterialItem>(entity =>
+        {
+            entity.HasOne(x => x.Moqaysa)
+                .WithMany(m => m.MaterialItems)
+                .HasForeignKey(x => x.MoqaysaId)
+                .IsRequired(false)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Material)
+                .WithMany()
+                .HasForeignKey(x => x.MaterialId)
+                .IsRequired(false)
+                .OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

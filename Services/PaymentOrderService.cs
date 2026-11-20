@@ -123,6 +123,62 @@ public class PaymentOrderService : IPaymentOrderService
                 ? string.Join(" ، ", shareAccounts)
                 : (t.Account != null ? t.Account.AccountNameAr : "غير محدد");
 
+            decimal totalMat = t.TotalMaterialsSum;
+            decimal totalWages = t.TotalWorkerWagesSum;
+            decimal totalMach = t.TotalMachineCostsSum;
+            decimal totalAdmin = t.AdminExpensesSum;
+            decimal totalMarkup = t.MarkupAmountSum;
+            decimal totalMof = t.MinistryOfFinanceSum;
+            decimal totalWorkers = t.WorkersFundSum;
+            decimal totalOther = t.OtherAmountSum;
+            decimal totalVat = t.VatTotal;
+            decimal grandTotal = t.SettlementGrandTotal;
+
+            // Fallback: If stored breakdown in DB has zeros but linked Moqaysat exist, compute them dynamically
+            if ((totalMat == 0m && totalWages == 0m && totalMach == 0m && distinctMoqaysat.Count > 0) ||
+                (isUnifiedMultiAccount && Math.Abs(grandTotal - distinctMoqaysatFullSum) <= 1m && totalMat == 0m))
+            {
+                decimal matSum = 0m, wagesSum = 0m, machSum = 0m, adminSum = 0m;
+                decimal markupSum = 0m, mofSum = 0m, workersSum = 0m, otherSum = 0m, vatSum = 0m;
+
+                foreach (var m in distinctMoqaysat)
+                {
+                    decimal ratio = 1.0m;
+                    if (!isUnifiedMultiAccount && m.AccountShares != null && m.AccountShares.Any(s => s.AccountId == t.AccountId))
+                    {
+                        var matchingShare = m.AccountShares.FirstOrDefault(s => s.AccountId == t.AccountId);
+                        if (matchingShare != null && matchingShare.SharePercentage > 0m)
+                        {
+                            ratio = matchingShare.SharePercentage / 100m;
+                        }
+                    }
+
+                    matSum += m.TotalMaterials * ratio;
+                    wagesSum += m.TotalWorkerWages * ratio;
+                    machSum += m.TotalMachineCosts * ratio;
+                    adminSum += m.AdminExpenses * ratio;
+                    markupSum += m.MarkupAmount * ratio;
+                    mofSum += m.MinistryOfFinanceFee * ratio;
+                    workersSum += m.WorkersSyndicateFund * ratio;
+                    otherSum += m.OtherAmount * ratio;
+                    vatSum += m.ApplyVat ? (m.VatAmount * ratio) : 0m;
+                }
+
+                totalMat = MoqaysaCalculationService.Round2(matSum);
+                totalWages = MoqaysaCalculationService.Round2(wagesSum);
+                totalMach = MoqaysaCalculationService.Round2(machSum);
+                totalAdmin = MoqaysaCalculationService.Round2(adminSum);
+                totalMarkup = MoqaysaCalculationService.Round2(markupSum);
+                totalMof = MoqaysaCalculationService.Round2(mofSum);
+                totalWorkers = MoqaysaCalculationService.Round2(workersSum);
+                totalOther = MoqaysaCalculationService.Round2(otherSum);
+                totalVat = MoqaysaCalculationService.Round2(vatSum);
+                if (grandTotal == 0m)
+                {
+                    grandTotal = MoqaysaCalculationService.Round2(totalMat + totalWages + totalMach + totalAdmin + totalMarkup + totalMof + totalWorkers + totalOther + totalVat);
+                }
+            }
+
             return new UnpaidTasweyaViewModel
             {
                 TasweyaId = t.TasweyaId,
@@ -134,18 +190,18 @@ public class PaymentOrderService : IPaymentOrderService
                 CustomerId = t.CustomerId,
                 CustomerNameAr = t.Customer != null ? t.Customer.CustomerNameAr : "غير محدد",
                 JobOrderNumbersText = t.JobOrderNumbersText,
-                TotalMaterialsSum = t.TotalMaterialsSum,
-                TotalWorkerWagesSum = t.TotalWorkerWagesSum,
-                TotalMachineCostsSum = t.TotalMachineCostsSum,
-                AdminExpensesSum = t.AdminExpensesSum,
-                MarkupAmountSum = t.MarkupAmountSum,
-                MinistryOfFinanceSum = t.MinistryOfFinanceSum,
-                WorkersFundSum = t.WorkersFundSum,
-                OtherAmountSum = t.OtherAmountSum,
-                RevenuesTotal = t.RevenuesTotal,
-                VatTotal = t.VatTotal,
-                SettlementGrandTotal = t.SettlementGrandTotal,
-                TotalAmountInWordsAr = t.TotalAmountInWordsAr,
+                TotalMaterialsSum = totalMat,
+                TotalWorkerWagesSum = totalWages,
+                TotalMachineCostsSum = totalMach,
+                AdminExpensesSum = totalAdmin,
+                MarkupAmountSum = totalMarkup,
+                MinistryOfFinanceSum = totalMof,
+                WorkersFundSum = totalWorkers,
+                OtherAmountSum = totalOther,
+                RevenuesTotal = t.RevenuesTotal > 0 ? t.RevenuesTotal : (grandTotal - totalVat),
+                VatTotal = totalVat,
+                SettlementGrandTotal = grandTotal,
+                TotalAmountInWordsAr = string.IsNullOrWhiteSpace(t.TotalAmountInWordsAr) ? _tafqeetService.ToWords(grandTotal) : t.TotalAmountInWordsAr,
                 IsPaid = t.IsPaid,
                 IsActive = t.IsActive,
                 CreatedAtUtc = t.CreatedAtUtc
