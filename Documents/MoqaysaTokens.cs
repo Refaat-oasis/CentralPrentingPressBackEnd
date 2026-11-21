@@ -9,11 +9,6 @@ public static class MoqaysaTokens
 
     public static Dictionary<string, object?> Build(MoqaysaPrintData d)
     {
-        if (d.Machinery.Count > MachinerySlots)
-            throw new PrintDataException($"The moqaysa template supports {MachinerySlots} machinery rows; found {d.Machinery.Count}.");
-        if (d.Materials.Count > MaterialSlots)
-            throw new PrintDataException($"The moqaysa template supports {MaterialSlots} material lines; found {d.Materials.Count}.");
-
         static Dictionary<string, object?> Row(string name, decimal hours, decimal rate, decimal value) => new()
         {
             ["Name"] = name,
