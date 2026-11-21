@@ -49,7 +49,8 @@ public sealed class DocumentsController(DocumentService documents) : ControllerB
         {
             var doc = await render();
             var disposition = doc.ContentType == "application/pdf" ? "inline" : "attachment";
-            Response.Headers.ContentDisposition = $"{disposition}; filename=\"{doc.FileName}\"";
+            var cleanFileName = DocumentService.SanitizeFileName(doc.FileName);
+            Response.Headers.ContentDisposition = $"{disposition}; filename=\"{cleanFileName}\"";
             return new FileContentResult(doc.Bytes, doc.ContentType);
         }
         catch (PrintDataException ex)

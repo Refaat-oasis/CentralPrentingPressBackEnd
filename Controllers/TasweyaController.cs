@@ -143,7 +143,10 @@ public class TasweyaController : ControllerBase
         byte[]? bytes = await _tasweyaService.ExportWordAsync(id, ct);
         if (bytes == null) return NotFound();
 
-        return File(bytes, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", $"Tasweya_{id}.docx");
+        var detail = await _tasweyaService.GetByIdAsync(id, ct);
+        var settlementNo = detail?.SettlementNumber ?? id.ToString();
+        var safeSettlement = CentralPress.API.Documents.DocumentService.SanitizeFileName(settlementNo);
+        return File(bytes, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", $"Tasweya_{safeSettlement}.docx");
     }
 
     [HttpGet("{id}/export-pdf")]
@@ -153,6 +156,9 @@ public class TasweyaController : ControllerBase
         byte[]? bytes = await _tasweyaService.ExportPdfAsync(id, ct);
         if (bytes == null) return NotFound();
 
-        return File(bytes, "application/pdf", $"Tasweya_{id}.pdf");
+        var detail = await _tasweyaService.GetByIdAsync(id, ct);
+        var settlementNo = detail?.SettlementNumber ?? id.ToString();
+        var safeSettlement = CentralPress.API.Documents.DocumentService.SanitizeFileName(settlementNo);
+        return File(bytes, "application/pdf", $"Tasweya_{safeSettlement}.pdf");
     }
 }

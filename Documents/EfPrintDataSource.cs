@@ -33,27 +33,33 @@ public sealed class EfPrintDataSource(ApplicationDbContext context) : IPrintData
             .ToListAsync(ct);
 
         var machineryLines = new List<MachineryLine>();
-        if (activeCatalogMachineries.Count > 0 && activeCatalogMachineries.Count <= MoqaysaTokens.MachinerySlots)
+
+        // 1. Include all items from the moqaysa in catalog order
+        var orderedMoqaysaItems = moqaysa.MachineryItems
+            .OrderBy(mi => mi.Machinery != null ? mi.Machinery.DisplayOrder : int.MaxValue)
+            .ThenBy(mi => mi.MachineryId)
+            .ToList();
+
+        foreach (var item in orderedMoqaysaItems)
         {
+            machineryLines.Add(new MachineryLine(
+                Name: !string.IsNullOrWhiteSpace(item.MachineryNameSnapshot) ? item.MachineryNameSnapshot : (item.Machinery?.MachineryNameAr ?? string.Empty),
+                Hours: item.Hours,
+                WorkerRate: item.WorkerHourlyRateSnapshot,
+                WorkerValue: item.TotalWorkerWages,
+                MachineHours: item.MachineHours,
+                MachineRate: item.MachineHourlyRateSnapshot,
+                MachineValue: item.TotalMachineOperatingCost));
+        }
+
+        // 2. Guarantee at least 11 rows (empty/inactive rows padded) if fewer were added/active
+        if (machineryLines.Count < MoqaysaTokens.MachinerySlots)
+        {
+            var usedNames = new HashSet<string>(machineryLines.Select(m => m.Name.Trim()), StringComparer.OrdinalIgnoreCase);
             foreach (var mac in activeCatalogMachineries)
             {
-                var item = moqaysa.MachineryItems.FirstOrDefault(i =>
-                    i.MachineryId == mac.MachineryId ||
-                    (!string.IsNullOrWhiteSpace(i.MachineryNameSnapshot) &&
-                     string.Equals(i.MachineryNameSnapshot.Trim(), mac.MachineryNameAr.Trim(), StringComparison.OrdinalIgnoreCase)));
-
-                if (item != null)
-                {
-                    machineryLines.Add(new MachineryLine(
-                        Name: !string.IsNullOrWhiteSpace(item.MachineryNameSnapshot) ? item.MachineryNameSnapshot : mac.MachineryNameAr,
-                        Hours: item.Hours,
-                        WorkerRate: item.WorkerHourlyRateSnapshot,
-                        WorkerValue: item.TotalWorkerWages,
-                        MachineHours: item.MachineHours,
-                        MachineRate: item.MachineHourlyRateSnapshot,
-                        MachineValue: item.TotalMachineOperatingCost));
-                }
-                else
+                if (machineryLines.Count >= MoqaysaTokens.MachinerySlots) break;
+                if (!usedNames.Contains(mac.MachineryNameAr.Trim()))
                 {
                     machineryLines.Add(new MachineryLine(
                         Name: mac.MachineryNameAr,
@@ -63,30 +69,25 @@ public sealed class EfPrintDataSource(ApplicationDbContext context) : IPrintData
                         MachineHours: 0m,
                         MachineRate: 0m,
                         MachineValue: 0m));
+                    usedNames.Add(mac.MachineryNameAr.Trim());
                 }
             }
-        }
-        else
-        {
-            var orderedItems = moqaysa.MachineryItems
-                .OrderBy(mi => mi.Machinery != null ? mi.Machinery.DisplayOrder : int.MaxValue)
-                .ThenBy(mi => mi.MachineryId)
-                .ToList();
 
-            foreach (var item in orderedItems)
+            while (machineryLines.Count < MoqaysaTokens.MachinerySlots)
             {
                 machineryLines.Add(new MachineryLine(
-                    Name: item.MachineryNameSnapshot,
-                    Hours: item.Hours,
-                    WorkerRate: item.WorkerHourlyRateSnapshot,
-                    WorkerValue: item.TotalWorkerWages,
-                    MachineHours: item.MachineHours,
-                    MachineRate: item.MachineHourlyRateSnapshot,
-                    MachineValue: item.TotalMachineOperatingCost));
+                    Name: string.Empty,
+                    Hours: 0m,
+                    WorkerRate: 0m,
+                    WorkerValue: 0m,
+                    MachineHours: 0m,
+                    MachineRate: 0m,
+                    MachineValue: 0m));
             }
         }
 
         var materialLines = moqaysa.MaterialItems
+            .OrderBy(m => m.ItemId)
             .Select(m => new MaterialLine(
                 Name: m.MaterialNameSnapshot,
                 Qty: m.Quantity,

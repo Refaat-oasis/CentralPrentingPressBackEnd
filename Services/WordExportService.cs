@@ -68,6 +68,12 @@ public class WordExportService
                 string fullPath = Path.Combine(shapeDir, fileName);
                 if (File.Exists(fullPath))
                     return File.ReadAllBytes(fullPath);
+
+                // Fallback mapping for renamed official templates in TasweyaAndMoqaysaShape
+                if (fileName == "Tasweya1.docx" && File.Exists(Path.Combine(shapeDir, "Tasweya_Single.docx")))
+                    return File.ReadAllBytes(Path.Combine(shapeDir, "Tasweya_Single.docx"));
+                if (fileName == "Tasweya2.docx" && File.Exists(Path.Combine(shapeDir, "Tasweya_Multi.docx")))
+                    return File.ReadAllBytes(Path.Combine(shapeDir, "Tasweya_Multi.docx"));
             }
 
             throw new FileNotFoundException(

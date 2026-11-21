@@ -16,14 +16,23 @@ public sealed class DocxTemplateFiller
     private static readonly Regex Token = new(@"\{\{([^{}]+)\}\}", RegexOptions.Compiled);
     private static readonly Regex Repeat = new(@"\{\{#(\w+)\}\}", RegexOptions.Compiled);
     private static readonly Regex Option = new(@"\{\{\?(\w+)\}\}", RegexOptions.Compiled);
-    private const int LineHeight = 600;
-    private const int LineBudget = 10400; // tasweya data rows shrink to keep one page
+    private const int LineHeight = 400;
+    private const int LineBudget = 6800; // tasweya data rows shrink to keep one page
 
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte[]> PathTemplateCache = new();
+    public static void ClearTemplateCache() => PathTemplateCache.Clear();
+
+    private static byte[] ReadTemplateBytes(string path)
+    {
+        using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        using var ms = new MemoryStream();
+        fs.CopyTo(ms);
+        return ms.ToArray();
+    }
 
     public byte[] Fill(string templatePath, IReadOnlyDictionary<string, object?> model)
     {
-        byte[] templateBytes = PathTemplateCache.GetOrAdd(templatePath, File.ReadAllBytes);
+        byte[] templateBytes = PathTemplateCache.GetOrAdd(templatePath, ReadTemplateBytes);
         using var ms = new MemoryStream(templateBytes.Length);
         ms.Write(templateBytes, 0, templateBytes.Length);
         ms.Position = 0;
@@ -64,6 +73,8 @@ public sealed class DocxTemplateFiller
                 }
             }
 
+            ExpandIndexedRows(body, model);
+
             Replace(body, model, null);
 
             var lines = body.Descendants<TableRow>().Where(r =>
@@ -78,10 +89,61 @@ public sealed class DocxTemplateFiller
                 }
             }
 
+            // Ensure cantSplit on all table rows across document so Word never splits a row across pages
+            foreach (var r in body.Descendants<TableRow>())
+            {
+                var rPr = r.TableRowProperties ?? r.AppendChild(new TableRowProperties());
+                if (rPr.GetFirstChild<CantSplit>() == null)
+                {
+                    rPr.AppendChild(new CantSplit());
+                }
+            }
+
+            // Moqaysa main table dynamic row budgeting to guarantee single-page fit
+            var moqaysaTable = body.Elements<Table>().FirstOrDefault(t => t.Descendants<TableCell>().Any(c => c.InnerText.Contains("عناصر المقايسة")));
+            if (moqaysaTable != null)
+            {
+                var allRows = moqaysaTable.Elements<TableRow>().ToList();
+                // Data rows start after the 5 top header rows (Title/Logos, Requester/Quantity, 3 Column header rows)
+                // and end before the 4 bottom rows (Gross, VAT, Grand Total, Signatures)
+                var dataRows = allRows.Where((r, idx) => idx >= 5 && idx < allRows.Count - 4).ToList();
+
+                const int DataRowsBudget = 12500; // twips budget for data rows on B4 page
+                var targetHeight = (uint)Math.Max(220, Math.Min(320, DataRowsBudget / Math.Max(1, dataRows.Count)));
+
+                // Adjust section margins to standard B4 official template margins
+                var sectPr = body.Elements<SectionProperties>().FirstOrDefault();
+                if (sectPr != null)
+                {
+                    var pgMar = sectPr.GetFirstChild<PageMargin>() ?? sectPr.AppendChild(new PageMargin());
+                    pgMar.Top = 400;
+                    pgMar.Bottom = 260;
+                }
+
+                foreach (var r in dataRows)
+                {
+                    var rPr = r.TableRowProperties ?? r.AppendChild(new TableRowProperties());
+                    var trHeight = rPr.GetFirstChild<TableRowHeight>() ?? rPr.AppendChild(new TableRowHeight());
+                    trHeight.Val = new UInt32Value(targetHeight);
+                    trHeight.HeightType = HeightRuleValues.Exact;
+
+                    // Ensure cell paragraphs have compact spacing in data rows only
+                    foreach (var p in r.Descendants<Paragraph>())
+                    {
+                        var pPr = p.ParagraphProperties ?? p.AppendChild(new ParagraphProperties());
+                        var spacing = pPr.SpacingBetweenLines ?? pPr.AppendChild(new SpacingBetweenLines());
+                        spacing.Before = "0";
+                        spacing.After = "0";
+                        spacing.Line = "220";
+                        spacing.LineRule = LineSpacingRuleValues.Exact;
+                    }
+                }
+            }
+
             // Shrink any trailing empty paragraphs so Word/LibreOffice never overflows an extra blank page
             foreach (var p in body.Elements<Paragraph>().ToList())
             {
-                if (string.IsNullOrWhiteSpace(p.InnerText))
+                if (string.IsNullOrWhiteSpace(p.InnerText) && !p.Descendants<Drawing>().Any())
                 {
                     var pPr = p.ParagraphProperties ?? p.AppendChild(new ParagraphProperties());
                     var spacing = pPr.SpacingBetweenLines ?? pPr.AppendChild(new SpacingBetweenLines());
@@ -99,6 +161,97 @@ public sealed class DocxTemplateFiller
         }
 
         return ms.ToArray();
+    }
+
+    private static void ExpandIndexedRows(Body body, IReadOnlyDictionary<string, object?> model)
+    {
+        int labourCount = model.TryGetValue("Labour", out var lObj) && lObj is IList<object?> lList ? lList.Count : 0;
+        int machineryCount = model.TryGetValue("Machinery", out var mObj) && mObj is IList<object?> mList ? mList.Count : 0;
+        int matCount = model.TryGetValue("Mat", out var matObj) && matObj is IList<object?> matList ? matList.Count : 0;
+
+        // 1. Expand Labour rows if count > 11
+        if (labourCount > 11)
+        {
+            var row11 = body.Descendants<TableRow>().FirstOrDefault(r => r.InnerText.Contains("{{Labour.11."));
+            if (row11 != null && row11.Parent != null)
+            {
+                var previousRow = row11;
+                for (int i = 12; i <= labourCount; i++)
+                {
+                    var clone = (TableRow)row11.CloneNode(true);
+                    foreach (var t in clone.Descendants<Text>())
+                    {
+                        if (t.Text != null)
+                        {
+                            if (t.Text.Contains("{{Labour.11."))
+                            {
+                                t.Text = t.Text.Replace("{{Labour.11.", $"{{{{Labour.{i}.");
+                            }
+                            else if (t.Text.Contains("{{Mat."))
+                            {
+                                // Clear material tokens on cloned labour rows so Mat.12 is not duplicated
+                                t.Text = "";
+                            }
+                        }
+                    }
+                    row11.Parent.InsertAfter(clone, previousRow);
+                    previousRow = clone;
+                }
+            }
+        }
+
+        // 2. Expand Machinery and Materials rows (starting at Machinery.11 / Mat.25)
+        int extraMac = Math.Max(0, machineryCount - 11);
+        int extraMat = Math.Max(0, matCount - 25);
+        int maxExtra = Math.Max(extraMac, extraMat);
+
+        if (maxExtra > 0)
+        {
+            var row11 = body.Descendants<TableRow>().FirstOrDefault(r => r.InnerText.Contains("{{Machinery.11."));
+            if (row11 != null && row11.Parent != null)
+            {
+                var previousRow = row11;
+                for (int i = 0; i < maxExtra; i++)
+                {
+                    var clone = (TableRow)row11.CloneNode(true);
+                    int currentMacIndex = 12 + i;
+                    int currentMatIndex = 26 + i;
+
+                    foreach (var t in clone.Descendants<Text>())
+                    {
+                        if (t.Text != null)
+                        {
+                            if (t.Text.Contains("{{Machinery.11."))
+                            {
+                                if (i < extraMac)
+                                {
+                                    t.Text = t.Text.Replace("{{Machinery.11.", $"{{{{Machinery.{currentMacIndex}.");
+                                }
+                                else
+                                {
+                                    // No more machinery, clear machinery cells
+                                    t.Text = "";
+                                }
+                            }
+                            else if (t.Text.Contains("{{Mat.25."))
+                            {
+                                if (i < extraMat)
+                                {
+                                    t.Text = t.Text.Replace("{{Mat.25.", $"{{{{Mat.{currentMatIndex}.");
+                                }
+                                else
+                                {
+                                    // No more materials, clear material cells
+                                    t.Text = "";
+                                }
+                            }
+                        }
+                    }
+                    row11.Parent.InsertAfter(clone, previousRow);
+                    previousRow = clone;
+                }
+            }
+        }
     }
 
     private static Dictionary<string, object?> Merge(IReadOnlyDictionary<string, object?> a, IReadOnlyDictionary<string, object?> b)

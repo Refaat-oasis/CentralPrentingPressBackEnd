@@ -139,7 +139,8 @@ public class MoqaysaController : ControllerBase
 
         var detail = await _moqaysaService.GetByIdAsync(id, ct);
         var jobOrder = detail?.JobOrderNumber ?? id.ToString();
-        return File(bytes, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", $"Moqaysa_{jobOrder}.docx");
+        var safeJob = CentralPress.API.Documents.DocumentService.SanitizeFileName(jobOrder);
+        return File(bytes, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", $"Moqaysa_{safeJob}.docx");
     }
 
     [HttpGet("{id}/export-pdf")]
@@ -151,6 +152,7 @@ public class MoqaysaController : ControllerBase
 
         var detail = await _moqaysaService.GetByIdAsync(id, ct);
         var jobOrder = detail?.JobOrderNumber ?? id.ToString();
-        return File(bytes, "application/pdf", $"Moqaysa_{jobOrder}.pdf");
+        var safeJob = CentralPress.API.Documents.DocumentService.SanitizeFileName(jobOrder);
+        return File(bytes, "application/pdf", $"Moqaysa_{safeJob}.pdf");
     }
 }
