@@ -56,18 +56,23 @@ public class WordExportService
         }
     }
 
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte[]> TemplateCache = new();
+
     private static byte[] LoadTemplateBytes(string templateFileName)
     {
-        var shapeDir = ResolveShapeDirectory();
-        if (!string.IsNullOrEmpty(shapeDir))
+        return TemplateCache.GetOrAdd(templateFileName, fileName =>
         {
-            string fullPath = Path.Combine(shapeDir, templateFileName);
-            if (File.Exists(fullPath))
-                return File.ReadAllBytes(fullPath);
-        }
+            var shapeDir = ResolveShapeDirectory();
+            if (!string.IsNullOrEmpty(shapeDir))
+            {
+                string fullPath = Path.Combine(shapeDir, fileName);
+                if (File.Exists(fullPath))
+                    return File.ReadAllBytes(fullPath);
+            }
 
-        throw new FileNotFoundException(
-            $"تعذر العثور على قالب Word المطلوب ({templateFileName}) في مجلد TasweyaAndMoqaysaShape.");
+            throw new FileNotFoundException(
+                $"تعذر العثور على قالب Word المطلوب ({fileName}) في مجلد TasweyaAndMoqaysaShape.");
+        });
     }
 
     public byte[] ExportMoqaysaToWord(Moqaysa m)

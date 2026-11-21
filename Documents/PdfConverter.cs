@@ -51,7 +51,15 @@ public sealed class PdfConverter(IOptions<DocumentOptions> options)
             var input = Path.Combine(dir.FullName, "in.docx");
             await File.WriteAllBytesAsync(input, docx, ct);
 
-            var psi = new ProcessStartInfo(_o.SofficePath)
+            // On Windows, prefer soffice.com (console launcher) if available for faster CLI synchronization
+            string executablePath = _o.SofficePath;
+            var comCandidate = Path.ChangeExtension(_o.SofficePath, ".com");
+            if (File.Exists(comCandidate))
+            {
+                executablePath = comCandidate;
+            }
+
+            var psi = new ProcessStartInfo(executablePath)
             {
                 UseShellExecute = false,
                 CreateNoWindow = true,

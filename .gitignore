@@ -50,3 +50,6 @@ appsettings.*.local.json
 
 ## Office lock files
 ~$*
+
+## Graphify cache
+graphify-out/cache/

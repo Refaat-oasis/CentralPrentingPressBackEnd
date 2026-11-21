@@ -1,0 +1,1358 @@
+{
+  "CentralPress.API.csproj": {
+    "mtime": 1795219229.2820892,
+    "seen": 1795223812.0108597,
+    "ast_hash": "7714ff7225d4c175e0492ce9bb9d4a82",
+    "semantic_hash": ""
+  },
+  "CentralPress.slnx": {
+    "mtime": 1793449085.007971,
+    "seen": 1795223812.0108597,
+    "ast_hash": "69071bcf0580f5d74e887f53ae450354",
+    "semantic_hash": ""
+  },
+  "Common/PermissionActions.cs": {
+    "mtime": 1794224328.049162,
+    "seen": 1795223812.0108597,
+    "ast_hash": "af52b112b1de27aca57cb905271c9646",
+    "semantic_hash": ""
+  },
+  "Common/PermissionConstants.cs": {
+    "mtime": 1794224311.0866613,
+    "seen": 1795223812.0108597,
+    "ast_hash": "15f1eccdb7878478b18315e4b67a6c73",
+    "semantic_hash": ""
+  },
+  "Common/PermissionModules.cs": {
+    "mtime": 1794224316.9784527,
+    "seen": 1795223812.0108597,
+    "ast_hash": "73baa79c8e48246921e2a0c837e680d7",
+    "semantic_hash": ""
+  },
+  "Controllers/AdminUsersController.cs": {
+    "mtime": 1794673362.4434736,
+    "seen": 1795223812.0108597,
+    "ast_hash": "4a49631bb8a10dbf29503e796bbd2906",
+    "semantic_hash": ""
+  },
+  "Controllers/AuthController.cs": {
+    "mtime": 1794673362.445472,
+    "seen": 1795223812.0108597,
+    "ast_hash": "b2878154c34b42f9bcf65549c335aeaa",
+    "semantic_hash": ""
+  },
+  "Controllers/CustomersController.cs": {
+    "mtime": 1794353160.881788,
+    "seen": 1795223812.0108597,
+    "ast_hash": "a11732ba1d77a6a05e9164332f9e52a6",
+    "semantic_hash": ""
+  },
+  "Controllers/DocumentsController.cs": {
+    "mtime": 1795219229.2831273,
+    "seen": 1795223812.0108597,
+    "ast_hash": "22d8e36db6247cb6790f069566358a99",
+    "semantic_hash": ""
+  },
+  "Controllers/FormulaConfigsController.cs": {
+    "mtime": 1794232483.8867302,
+    "seen": 1795223812.0108597,
+    "ast_hash": "1ff0a1f6e61261cd7f3b7f3dec69775e",
+    "semantic_hash": ""
+  },
+  "Controllers/JobTitlesController.cs": {
+    "mtime": 1794220301.513898,
+    "seen": 1795223812.0108597,
+    "ast_hash": "b85f446a0f57f63fcf6d4bbeffaf8760",
+    "semantic_hash": ""
+  },
+  "Controllers/MachineriesController.cs": {
+    "mtime": 1794232462.3468883,
+    "seen": 1795223812.0108597,
+    "ast_hash": "06b26af74c547b5c284be69cd6d376f1",
+    "semantic_hash": ""
+  },
+  "Controllers/MaterialsController.cs": {
+    "mtime": 1794232471.8034954,
+    "seen": 1795223812.0108597,
+    "ast_hash": "45c40539ff24e5e9e4c74e25e85f58af",
+    "semantic_hash": ""
+  },
+  "Controllers/MoqaysaController.cs": {
+    "mtime": 1794673362.4464736,
+    "seen": 1795223812.0108597,
+    "ast_hash": "98139bee7aff3cb0f0d66cb64c7de786",
+    "semantic_hash": ""
+  },
+  "Controllers/PaymentOrdersController.cs": {
+    "mtime": 1795219229.2841647,
+    "seen": 1795223812.0108597,
+    "ast_hash": "f73c85b56396ba281965931729023733",
+    "semantic_hash": ""
+  },
+  "Controllers/ReportsController.cs": {
+    "mtime": 1794353161.0857463,
+    "seen": 1795223812.0108597,
+    "ast_hash": "dc02cec26b18662c956663b1878246ff",
+    "semantic_hash": ""
+  },
+  "Controllers/SuperAdminController.cs": {
+    "mtime": 1794673362.447474,
+    "seen": 1795223812.0108597,
+    "ast_hash": "eb5e50376b31f94c175e8012aa44f025",
+    "semantic_hash": ""
+  },
+  "Controllers/TasweyaController.cs": {
+    "mtime": 1794673362.4484737,
+    "seen": 1795223812.0108597,
+    "ast_hash": "7ac62cbf85de8138c6257266e7a51848",
+    "semantic_hash": ""
+  },
+  "DTOs/AccountSaveDto.cs": {
+    "mtime": 1794245830.6830254,
+    "seen": 1795223812.0108597,
+    "ast_hash": "bd79218af91b63880b97f6577b8801f3",
+    "semantic_hash": ""
+  },
+  "DTOs/AuditBacklogQueryDto.cs": {
+    "mtime": 1794673362.4504716,
+    "seen": 1795223812.0108597,
+    "ast_hash": "edf58d50fcf52a49b1902248d297be5d",
+    "semantic_hash": ""
+  },
+  "DTOs/CancelPaymentOrderDto.cs": {
+    "mtime": 1794245876.0034442,
+    "seen": 1795223812.0108597,
+    "ast_hash": "d3ef415c0e1d62e4b6307ba326b8efe0",
+    "semantic_hash": ""
+  },
+  "DTOs/ChangePasswordDto.cs": {
+    "mtime": 1794217094.4198186,
+    "seen": 1795223812.0108597,
+    "ast_hash": "b4e7632fe8e0a91f8a9bb50068428973",
+    "semantic_hash": ""
+  },
+  "DTOs/CreateEmployeeDto.cs": {
+    "mtime": 1794673362.4514709,
+    "seen": 1795223812.0108597,
+    "ast_hash": "273b1c01f888fc0ca788599e4e239c44",
+    "semantic_hash": ""
+  },
+  "DTOs/CreateMultiAccountTasweyaDto.cs": {
+    "mtime": 1794673362.4514709,
+    "seen": 1795223812.0108597,
+    "ast_hash": "a1c4092c179dc7e91a4d80285a28e76b",
+    "semantic_hash": ""
+  },
+  "DTOs/CreatePaymentOrderDto.cs": {
+    "mtime": 1794246825.30004,
+    "seen": 1795223812.0108597,
+    "ast_hash": "6daad83992b02abe2f067591f46f07c6",
+    "semantic_hash": ""
+  },
+  "DTOs/CreateTasweyaDto.cs": {
+    "mtime": 1794245846.224092,
+    "seen": 1795223812.0108597,
+    "ast_hash": "81ee69a4ef71cf800e7b0c2b7ef5fa73",
+    "semantic_hash": ""
+  },
+  "DTOs/CustomerDto.cs": {
+    "mtime": 1794245836.901477,
+    "seen": 1795223812.0108597,
+    "ast_hash": "bd4afe082442fc64dbfd265f1dc096df",
+    "semantic_hash": ""
+  },
+  "DTOs/CustomerSummaryFilterDto.cs": {
+    "mtime": 1794254230.1041756,
+    "seen": 1795223812.0108597,
+    "ast_hash": "62e352ae2fd236e1edde644c962451a0",
+    "semantic_hash": ""
+  },
+  "DTOs/ForgotPasswordDto.cs": {
+    "mtime": 1794217158.207528,
+    "seen": 1795223812.0108597,
+    "ast_hash": "e56890d969fdd52f6509fee491a61e55",
+    "semantic_hash": ""
+  },
+  "DTOs/JobTitleDto.cs": {
+    "mtime": 1794218562.883784,
+    "seen": 1795223812.0108597,
+    "ast_hash": "65b1bfc7af78963906efcfd605771a2b",
+    "semantic_hash": ""
+  },
+  "DTOs/LoginDto.cs": {
+    "mtime": 1794217021.2565084,
+    "seen": 1795223812.0108597,
+    "ast_hash": "5565f9bfebc694958a25d2851d4985d8",
+    "semantic_hash": ""
+  },
+  "DTOs/MachineryDto.cs": {
+    "mtime": 1794232011.0722902,
+    "seen": 1795223812.0108597,
+    "ast_hash": "0b63924f32ea49109f2abfbe4a796fc8",
+    "semantic_hash": ""
+  },
+  "DTOs/MachineryItemInputDto.cs": {
+    "mtime": 1794231990.1002975,
+    "seen": 1795223812.0108597,
+    "ast_hash": "4d10106304307f35cabed51badf6dbbc",
+    "semantic_hash": ""
+  },
+  "DTOs/MaterialDto.cs": {
+    "mtime": 1794233338.3766184,
+    "seen": 1795223812.0108597,
+    "ast_hash": "7c9145ec258ccb83e6e0bf5bec95c310",
+    "semantic_hash": ""
+  },
+  "DTOs/MaterialItemInputDto.cs": {
+    "mtime": 1794231984.2864423,
+    "seen": 1795223812.0108597,
+    "ast_hash": "fafd439afe2ae82648b7bf0706727cac",
+    "semantic_hash": ""
+  },
+  "DTOs/ModuleEffectivePermissionDto.cs": {
+    "mtime": 1794219846.255922,
+    "seen": 1795223812.0108597,
+    "ast_hash": "a9a92ab3b736701f88fe8543f1e44c24",
+    "semantic_hash": ""
+  },
+  "DTOs/MoqaysaAccountShareDto.cs": {
+    "mtime": 1794673362.4534712,
+    "seen": 1795223812.0108597,
+    "ast_hash": "6ac793acb794190da119ea865888264a",
+    "semantic_hash": ""
+  },
+  "DTOs/MoqaysaCalculationRequestDto.cs": {
+    "mtime": 1794232059.5865757,
+    "seen": 1795223812.0108597,
+    "ast_hash": "fa861a75a90df08f6ce3bfcc1a1b11fb",
+    "semantic_hash": ""
+  },
+  "DTOs/MoqaysaSaveDto.cs": {
+    "mtime": 1794673362.4544752,
+    "seen": 1795223812.0108597,
+    "ast_hash": "9501e4080704f250a8d2d4a4b060fce2",
+    "semantic_hash": ""
+  },
+  "DTOs/MoqaysatDetailedFilterDto.cs": {
+    "mtime": 1794254234.3727517,
+    "seen": 1795223812.0108597,
+    "ast_hash": "d1c563564cec9ab38441b3440de29080",
+    "semantic_hash": ""
+  },
+  "DTOs/PaginationRequestDto.cs": {
+    "mtime": 1794218592.8829868,
+    "seen": 1795223812.0108597,
+    "ast_hash": "37f499cff8f1b64773a64dc75d20ba88",
+    "semantic_hash": ""
+  },
+  "DTOs/PaperCuttingCalculationRequestDto.cs": {
+    "mtime": 1794232044.335954,
+    "seen": 1795223812.0108597,
+    "ast_hash": "35f8c0ba96d8668a9c663cd159892d05",
+    "semantic_hash": ""
+  },
+  "DTOs/PaymentOrdersRegisterFilterDto.cs": {
+    "mtime": 1794254238.439154,
+    "seen": 1795223812.0108597,
+    "ast_hash": "9706d9a944a103eed1eaf302dd4b812e",
+    "semantic_hash": ""
+  },
+  "DTOs/PermissionOverrideInputDto.cs": {
+    "mtime": 1794218504.764216,
+    "seen": 1795223812.0108597,
+    "ast_hash": "ca934a22e9b10fa2a510ddd4bb3c6cbc",
+    "semantic_hash": ""
+  },
+  "DTOs/RefreshTokenRequestDto.cs": {
+    "mtime": 1794673362.4544752,
+    "seen": 1795223812.0108597,
+    "ast_hash": "39e41cb6b2729cf6f387b397ae845e31",
+    "semantic_hash": ""
+  },
+  "DTOs/ResetPasswordDto.cs": {
+    "mtime": 1794217115.0836523,
+    "seen": 1795223812.0108597,
+    "ast_hash": "4077ac8bb636a4e146d74bf9599460df",
+    "semantic_hash": ""
+  },
+  "DTOs/RevokeTokenRequestDto.cs": {
+    "mtime": 1794673362.4554722,
+    "seen": 1795223812.0108597,
+    "ast_hash": "b56b66e61dca33f09e69bd91992ed0c0",
+    "semantic_hash": ""
+  },
+  "DTOs/RolePermissionInputDto.cs": {
+    "mtime": 1794218577.5210762,
+    "seen": 1795223812.0108597,
+    "ast_hash": "c7beb4d009e97fcfd22d887e892acd8e",
+    "semantic_hash": ""
+  },
+  "DTOs/SaveOverridesDto.cs": {
+    "mtime": 1794218519.4169962,
+    "seen": 1795223812.0108597,
+    "ast_hash": "dd473a2e57c95b98588a13075783cfc1",
+    "semantic_hash": ""
+  },
+  "DTOs/SuperAdminLoginDto.cs": {
+    "mtime": 1794673362.4574704,
+    "seen": 1795223812.0108597,
+    "ast_hash": "4b5fdc5b6eefcd5ff6574bb41fd06709",
+    "semantic_hash": ""
+  },
+  "DTOs/TestSmtpRequestDto.cs": {
+    "mtime": 1794218541.8200903,
+    "seen": 1795223812.0108597,
+    "ast_hash": "bbc28b9e1c42067f20cd1d4fd9e484d3",
+    "semantic_hash": ""
+  },
+  "DTOs/UpdateEmployeeDto.cs": {
+    "mtime": 1794673362.4584725,
+    "seen": 1795223812.0108597,
+    "ast_hash": "aeb40281a7e13990ea3b94c7e2d4571b",
+    "semantic_hash": ""
+  },
+  "DTOs/UpdateFormulaConfigDto.cs": {
+    "mtime": 1794232036.5621638,
+    "seen": 1795223812.0108597,
+    "ast_hash": "f56d85530aebb149572dbec6afb19fe9",
+    "semantic_hash": ""
+  },
+  "DTOs/UpdateMachineryMaintenanceDto.cs": {
+    "mtime": 1794232049.717293,
+    "seen": 1795223812.0108597,
+    "ast_hash": "80036de0ddc575dc5cfb3feb0afce0c2",
+    "semantic_hash": ""
+  },
+  "DTOs/UpdatePaymentOrderDto.cs": {
+    "mtime": 1794246833.3460271,
+    "seen": 1795223812.0108597,
+    "ast_hash": "9238e4ed904b92f583bd5b414c685fbc",
+    "semantic_hash": ""
+  },
+  "DTOs/UpdatePaymentOrderStatusDto.cs": {
+    "mtime": 1794247930.9719439,
+    "seen": 1795223812.0108597,
+    "ast_hash": "25047c6c858be627c828aa0ca5fed7f6",
+    "semantic_hash": ""
+  },
+  "DTOs/UpdateProfileDto.cs": {
+    "mtime": 1794218415.9565206,
+    "seen": 1795223812.0108597,
+    "ast_hash": "f95cb042fbe985affc393ad194284871",
+    "semantic_hash": ""
+  },
+  "DTOs/UpdateTasweyaDto.cs": {
+    "mtime": 1794245852.131176,
+    "seen": 1795223812.0108597,
+    "ast_hash": "d786bd73b29de5a0755246c8db7665f5",
+    "semantic_hash": ""
+  },
+  "DTOs/VerifyResetCodeDto.cs": {
+    "mtime": 1794217131.5942972,
+    "seen": 1795223812.0108597,
+    "ast_hash": "abd1a8ba2471684c3a864b5aed7601e5",
+    "semantic_hash": ""
+  },
+  "Data/ApplicationDbContext.cs": {
+    "mtime": 1795219229.2841647,
+    "seen": 1795223812.0108597,
+    "ast_hash": "fe208849646c74bd8857feb49654cb56",
+    "semantic_hash": ""
+  },
+  "Data/DbInitializer.cs": {
+    "mtime": 1795219229.2850902,
+    "seen": 1795223812.0108597,
+    "ast_hash": "aa658e1fd8a720f802d046b1efdbc2db",
+    "semantic_hash": ""
+  },
+  "Documents/AccountLine.cs": {
+    "mtime": 1795219229.2870886,
+    "seen": 1795223812.0108597,
+    "ast_hash": "b818b63e52e9dd3ff3ea1a067e11132e",
+    "semantic_hash": ""
+  },
+  "Documents/DocFormat.cs": {
+    "mtime": 1795219229.2880864,
+    "seen": 1795223812.0108597,
+    "ast_hash": "86fc33635d5e8b1011fddb773526931f",
+    "semantic_hash": ""
+  },
+  "Documents/DocumentOptions.cs": {
+    "mtime": 1795219229.2890863,
+    "seen": 1795223812.0108597,
+    "ast_hash": "3887e29fb3c56fb0ef6173973f07ace6",
+    "semantic_hash": ""
+  },
+  "Documents/DocumentService.cs": {
+    "mtime": 1795219229.2900872,
+    "seen": 1795223812.0108597,
+    "ast_hash": "f3de06dce6d0bd2060e6216fbedc6fb4",
+    "semantic_hash": ""
+  },
+  "Documents/DocxTemplateFiller.cs": {
+    "mtime": 1795223600.7766564,
+    "seen": 1795223812.0108597,
+    "ast_hash": "25fddf60a53e4866007a0972b9e3ca60",
+    "semantic_hash": ""
+  },
+  "Documents/EfPrintDataSource.cs": {
+    "mtime": 1795219229.292086,
+    "seen": 1795223812.0108597,
+    "ast_hash": "1577e8627814ab44012422aeeff0c2a2",
+    "semantic_hash": ""
+  },
+  "Documents/IAmountInWords.cs": {
+    "mtime": 1795219229.2930875,
+    "seen": 1795223812.0108597,
+    "ast_hash": "74598e6d606c8cc034d410b4514e2876",
+    "semantic_hash": ""
+  },
+  "Documents/IPrintDataSource.cs": {
+    "mtime": 1795219229.2930875,
+    "seen": 1795223812.0108597,
+    "ast_hash": "6a9f97f643c14e87d952e0a17cbfbac0",
+    "semantic_hash": ""
+  },
+  "Documents/LibreOfficeWarmService.cs": {
+    "mtime": 1795223321.1949346,
+    "seen": 1795223812.0108597,
+    "ast_hash": "b5051fc98dc10c002294b16e3a714d68",
+    "semantic_hash": ""
+  },
+  "Documents/MachineryLine.cs": {
+    "mtime": 1795219229.2940903,
+    "seen": 1795223812.0108597,
+    "ast_hash": "fda7409190b5f960229fdc0ff1ba4367",
+    "semantic_hash": ""
+  },
+  "Documents/MaterialLine.cs": {
+    "mtime": 1795219229.2940903,
+    "seen": 1795223812.0108597,
+    "ast_hash": "094abb4188cbd191fa1136bf968d33bf",
+    "semantic_hash": ""
+  },
+  "Documents/MoqaysaPrintData.cs": {
+    "mtime": 1795219229.2950888,
+    "seen": 1795223812.0108597,
+    "ast_hash": "904b6e0cea97499462283ccf567c75f4",
+    "semantic_hash": ""
+  },
+  "Documents/MoqaysaTokens.cs": {
+    "mtime": 1795219229.2965128,
+    "seen": 1795223812.011138,
+    "ast_hash": "51a87f5231f455d0859ea5e2e1d587c3",
+    "semantic_hash": ""
+  },
+  "Documents/PdfConverter.cs": {
+    "mtime": 1795223601.0557895,
+    "seen": 1795223812.011138,
+    "ast_hash": "73157ac063e9fe386f4ab8091e83594b",
+    "semantic_hash": ""
+  },
+  "Documents/PrintDataException.cs": {
+    "mtime": 1795219229.298945,
+    "seen": 1795223812.011138,
+    "ast_hash": "59ff02ad731fb9f3f7d030762f4bee43",
+    "semantic_hash": ""
+  },
+  "Documents/RenderedDocument.cs": {
+    "mtime": 1795219229.299968,
+    "seen": 1795223812.011138,
+    "ast_hash": "93c2767b48005872b3323bc2e6791cef",
+    "semantic_hash": ""
+  },
+  "Documents/TafqeetAmountInWords.cs": {
+    "mtime": 1795219229.299968,
+    "seen": 1795223812.011138,
+    "ast_hash": "d1fddaae0fb4c7d91014c4c086a43e93",
+    "semantic_hash": ""
+  },
+  "Documents/TasweyaPrintData.cs": {
+    "mtime": 1795219229.3009808,
+    "seen": 1795223812.011138,
+    "ast_hash": "592f356887735fb53dad3bb1faf41896",
+    "semantic_hash": ""
+  },
+  "Documents/TasweyaTokens.cs": {
+    "mtime": 1795219229.3019829,
+    "seen": 1795223812.011138,
+    "ast_hash": "bbe19bf3dd3b47df72aa2ac1df8d3588",
+    "semantic_hash": ""
+  },
+  "Entities/AccountEntity.cs": {
+    "mtime": 1794245709.665906,
+    "seen": 1795223812.011138,
+    "ast_hash": "1ddc5d5c770576896a8aff9aebc8cabc",
+    "semantic_hash": ""
+  },
+  "Entities/ApplicationUser.cs": {
+    "mtime": 1794351103.876698,
+    "seen": 1795223812.011138,
+    "ast_hash": "05368e9755c3ae74526d13918df2cbc4",
+    "semantic_hash": ""
+  },
+  "Entities/AuditBacklog.cs": {
+    "mtime": 1793361647.880751,
+    "seen": 1795223812.011138,
+    "ast_hash": "0ac975fc474d41561b1a4453d574d52c",
+    "semantic_hash": ""
+  },
+  "Entities/CostingFormulaConfig.cs": {
+    "mtime": 1793361689.559374,
+    "seen": 1795223812.011138,
+    "ast_hash": "66a1d33f16a3a85932bc875a49297bd9",
+    "semantic_hash": ""
+  },
+  "Entities/Customer.cs": {
+    "mtime": 1794245699.6418276,
+    "seen": 1795223812.011138,
+    "ast_hash": "0eef6214447481ba33100473296e9cb6",
+    "semantic_hash": ""
+  },
+  "Entities/JobTitle.cs": {
+    "mtime": 1793361619.0006666,
+    "seen": 1795223812.011138,
+    "ast_hash": "a61f47381468fb4280e1080570297f03",
+    "semantic_hash": ""
+  },
+  "Entities/Machinery.cs": {
+    "mtime": 1794231902.9655538,
+    "seen": 1795223812.011138,
+    "ast_hash": "cba2fd22df767bb12dd5e0373c7be90e",
+    "semantic_hash": ""
+  },
+  "Entities/Material.cs": {
+    "mtime": 1793444072.062113,
+    "seen": 1795223812.011138,
+    "ast_hash": "7893466a9f44eb98d67a6019e238df1b",
+    "semantic_hash": ""
+  },
+  "Entities/Moqaysa.cs": {
+    "mtime": 1794673362.4614718,
+    "seen": 1795223812.011138,
+    "ast_hash": "9c8db0edf899f9f4e8d8a1c70a49a5b7",
+    "semantic_hash": ""
+  },
+  "Entities/MoqaysaAccountShare.cs": {
+    "mtime": 1794673362.4624734,
+    "seen": 1795223812.011138,
+    "ast_hash": "1ebb8df6e3d6a2f8472010cb9487a0e4",
+    "semantic_hash": ""
+  },
+  "Entities/MoqaysaMachineryItem.cs": {
+    "mtime": 1794353161.2249153,
+    "seen": 1795223812.011138,
+    "ast_hash": "7a13db6f2a95946f6321e2068c2de731",
+    "semantic_hash": ""
+  },
+  "Entities/MoqaysaMaterialItem.cs": {
+    "mtime": 1794216870.5396993,
+    "seen": 1795223812.011138,
+    "ast_hash": "764469691d4f0d0dd9d11fb50787095f",
+    "semantic_hash": ""
+  },
+  "Entities/PaymentOrder.cs": {
+    "mtime": 1794245679.5815995,
+    "seen": 1795223812.011138,
+    "ast_hash": "bb204f0dce145150dc73b83f115567ef",
+    "semantic_hash": ""
+  },
+  "Entities/PaymentOrderTasweyaLink.cs": {
+    "mtime": 1794245685.5897982,
+    "seen": 1795223812.011138,
+    "ast_hash": "c4410cb614434909bb3ee1fbcec42e9f",
+    "semantic_hash": ""
+  },
+  "Entities/RefreshToken.cs": {
+    "mtime": 1794216822.0390527,
+    "seen": 1795223812.011138,
+    "ast_hash": "bae9da92d87daf0340e9022f6d36b19b",
+    "semantic_hash": ""
+  },
+  "Entities/RolePermission.cs": {
+    "mtime": 1793361633.7209804,
+    "seen": 1795223812.011138,
+    "ast_hash": "d7e21e00a9d6539aebd6a5d591031fe0",
+    "semantic_hash": ""
+  },
+  "Entities/SystemModule.cs": {
+    "mtime": 1793361626.8723333,
+    "seen": 1795223812.011138,
+    "ast_hash": "810866142c1236193dd7046872ea6d66",
+    "semantic_hash": ""
+  },
+  "Entities/Tasweya.cs": {
+    "mtime": 1793361737.6713123,
+    "seen": 1795223812.011138,
+    "ast_hash": "f1e2882354ff1040ad6abbc3fe9aa450",
+    "semantic_hash": ""
+  },
+  "Entities/TasweyaMoqaysaLink.cs": {
+    "mtime": 1793361744.6643858,
+    "seen": 1795223812.011138,
+    "ast_hash": "76380114d68d2da8c1bc06e7155baa9b",
+    "semantic_hash": ""
+  },
+  "Entities/UserPermissionOverride.cs": {
+    "mtime": 1794216939.3567183,
+    "seen": 1795223812.011138,
+    "ast_hash": "d3767e0af764628a88388469a1519fe0",
+    "semantic_hash": ""
+  },
+  "Filters/AuditBacklogActionFilter.cs": {
+    "mtime": 1794219942.8591244,
+    "seen": 1795223812.011138,
+    "ast_hash": "843363c3a4dc3788aee87514919f0f7a",
+    "semantic_hash": ""
+  },
+  "Filters/PermissionAuthorizeAttribute.cs": {
+    "mtime": 1794220023.7472982,
+    "seen": 1795223812.011138,
+    "ast_hash": "b51ca9f2dadd5d2181895ce16754fb60",
+    "semantic_hash": ""
+  },
+  "Helpers/ArabicTlvQrHelper.cs": {
+    "mtime": 1794254358.217086,
+    "seen": 1795223812.011138,
+    "ast_hash": "cb7aa19bd1d34509ac3e07085a1d5ffc",
+    "semantic_hash": ""
+  },
+  "Helpers/FinancialYearHelper.cs": {
+    "mtime": 1794673362.4624734,
+    "seen": 1795223812.011138,
+    "ast_hash": "46271ffb2e9a62762d5c2785f2e9c041",
+    "semantic_hash": ""
+  },
+  "Middleware/UserSessionValidationMiddleware.cs": {
+    "mtime": 1794673362.4634733,
+    "seen": 1795223812.011138,
+    "ast_hash": "550e5afde1ed6ac17f2e137eaf18ea28",
+    "semantic_hash": ""
+  },
+  "Migrations/20261031014557_InitialCreate.Designer.cs": {
+    "mtime": 1793411157.2812128,
+    "seen": 1795223812.011138,
+    "ast_hash": "fca009f502d663bf3a5e8d276685163c",
+    "semantic_hash": ""
+  },
+  "Migrations/20261031014557_InitialCreate.cs": {
+    "mtime": 1793411157.2802055,
+    "seen": 1795223812.011138,
+    "ast_hash": "5e94cf2802cf50e7d746f91f06ba05e3",
+    "semantic_hash": ""
+  },
+  "Migrations/20261109113504_M1_DatabaseConstraintsAndRefreshTokens.Designer.cs": {
+    "mtime": 1794224104.4745321,
+    "seen": 1795223812.011138,
+    "ast_hash": "b6d4a7266c5865945203995cca2bdbf4",
+    "semantic_hash": ""
+  },
+  "Migrations/20261109113504_M1_DatabaseConstraintsAndRefreshTokens.cs": {
+    "mtime": 1794224104.4745321,
+    "seen": 1795223812.011138,
+    "ast_hash": "65ac100f9ee5f0e575d60c9e42d1acd7",
+    "semantic_hash": ""
+  },
+  "Migrations/20261109134541_M2_MachineryMaintenanceAndCostingOverhead.Designer.cs": {
+    "mtime": 1794231942.0228379,
+    "seen": 1795223812.011138,
+    "ast_hash": "09524331a26aabcacc9f857c15076ae2",
+    "semantic_hash": ""
+  },
+  "Migrations/20261109134541_M2_MachineryMaintenanceAndCostingOverhead.cs": {
+    "mtime": 1794231942.02182,
+    "seen": 1795223812.011138,
+    "ast_hash": "a87fec0c30d1a6ba98bb0d4d5b9339c4",
+    "semantic_hash": ""
+  },
+  "Migrations/20261109173615_M3_PaymentOrdersBudgetAndTasweyaConstraints.Designer.cs": {
+    "mtime": 1794245775.8493772,
+    "seen": 1795223812.011138,
+    "ast_hash": "18d3ea66ef89744669a324c791e089b2",
+    "semantic_hash": ""
+  },
+  "Migrations/20261109173615_M3_PaymentOrdersBudgetAndTasweyaConstraints.cs": {
+    "mtime": 1794245775.8493772,
+    "seen": 1795223812.011138,
+    "ast_hash": "e73cf2d7306e23ea54569b416c61f359",
+    "semantic_hash": ""
+  },
+  "Migrations/20261110034331_M4_MoqaysatJobOrderNumberNonUnique.Designer.cs": {
+    "mtime": 1794282211.3341327,
+    "seen": 1795223812.011138,
+    "ast_hash": "9e166f78029714f68c2201155cb74378",
+    "semantic_hash": ""
+  },
+  "Migrations/20261110034331_M4_MoqaysatJobOrderNumberNonUnique.cs": {
+    "mtime": 1794282211.3331325,
+    "seen": 1795223812.011138,
+    "ast_hash": "2631a5e90d05978452424b4732620c6a",
+    "semantic_hash": ""
+  },
+  "Migrations/20261110231318_AddSessionAndMoqaysaUpdates.Designer.cs": {
+    "mtime": 1794352398.525978,
+    "seen": 1795223812.011138,
+    "ast_hash": "5d0d8e444589e46deb1c2ba3626a5ff5",
+    "semantic_hash": ""
+  },
+  "Migrations/20261110231318_AddSessionAndMoqaysaUpdates.cs": {
+    "mtime": 1794352398.525329,
+    "seen": 1795223812.011138,
+    "ast_hash": "4c4a56d1507f14a23b0190bec896798f",
+    "semantic_hash": ""
+  },
+  "Migrations/20261111203332_M5_TasweyaSettlementNumberNonUnique.Designer.cs": {
+    "mtime": 1794673362.465471,
+    "seen": 1795223812.011138,
+    "ast_hash": "4a5fcdebd81628b03e73ca0127cfcfba",
+    "semantic_hash": ""
+  },
+  "Migrations/20261111203332_M5_TasweyaSettlementNumberNonUnique.cs": {
+    "mtime": 1794673362.465471,
+    "seen": 1795223812.011138,
+    "ast_hash": "514f2a68b3dd38ed9622e4782c8b0142",
+    "semantic_hash": ""
+  },
+  "Migrations/20261112034848_M6_MoqaysaAccountShares.Designer.cs": {
+    "mtime": 1794673362.4669335,
+    "seen": 1795223812.011138,
+    "ast_hash": "6725096ae21dbcb6fc5f38d76f471e21",
+    "semantic_hash": ""
+  },
+  "Migrations/20261112034848_M6_MoqaysaAccountShares.cs": {
+    "mtime": 1794673362.4674706,
+    "seen": 1795223812.011138,
+    "ast_hash": "91fffab97cc5a4e30d6e5fcfd5a93080",
+    "semantic_hash": ""
+  },
+  "Migrations/20261112193913_M7_MoqaysaAccountShareSettlements.Designer.cs": {
+    "mtime": 1794673362.468472,
+    "seen": 1795223812.011138,
+    "ast_hash": "13423131687d5bc012732067559fd7b2",
+    "semantic_hash": ""
+  },
+  "Migrations/20261112193913_M7_MoqaysaAccountShareSettlements.cs": {
+    "mtime": 1794673362.4694705,
+    "seen": 1795223812.011138,
+    "ast_hash": "9e89fb423fc7024734d54194ad6fd1e5",
+    "semantic_hash": ""
+  },
+  "Migrations/ApplicationDbContextModelSnapshot.cs": {
+    "mtime": 1794673362.470471,
+    "seen": 1795223812.011138,
+    "ast_hash": "e5e286b6096b62dcbf6b97a31e8d00b1",
+    "semantic_hash": ""
+  },
+  "Models/PaymentOrderStatus.cs": {
+    "mtime": 1794245662.2742932,
+    "seen": 1795223812.011138,
+    "ast_hash": "be0ef5f528d09ffcc03df6fdbefc7fc6",
+    "semantic_hash": ""
+  },
+  "Program.cs": {
+    "mtime": 1795223160.5415149,
+    "seen": 1795223812.011138,
+    "ast_hash": "f202b8739afd9983dab95b304113074e",
+    "semantic_hash": ""
+  },
+  "Properties/launchSettings.json": {
+    "mtime": 1793363224.4298923,
+    "seen": 1795223812.011138,
+    "ast_hash": "fda248a3616bb9ea6535981c1d16fa45",
+    "semantic_hash": ""
+  },
+  "Services/AdminUserService.cs": {
+    "mtime": 1794673362.473471,
+    "seen": 1795223812.011138,
+    "ast_hash": "974d9c03529c43395dff598f4432e075",
+    "semantic_hash": ""
+  },
+  "Services/ArabicTafqeetService.cs": {
+    "mtime": 1795219229.304981,
+    "seen": 1795223812.011138,
+    "ast_hash": "d47c03905b2d2932a1fc2f512ba8e8fc",
+    "semantic_hash": ""
+  },
+  "Services/AuditLogService.cs": {
+    "mtime": 1794246096.1208496,
+    "seen": 1795223812.011138,
+    "ast_hash": "4af9bf6f0339a37e93f7f12d9e7a3182",
+    "semantic_hash": ""
+  },
+  "Services/AuthService.cs": {
+    "mtime": 1794673362.474471,
+    "seen": 1795223812.011138,
+    "ast_hash": "4814007cbf7e10f00113920464f39024",
+    "semantic_hash": ""
+  },
+  "Services/CustomerService.cs": {
+    "mtime": 1795219229.3059855,
+    "seen": 1795223812.011138,
+    "ast_hash": "3cac56e3223dff1d353d11dacb81fd77",
+    "semantic_hash": ""
+  },
+  "Services/EmailService.cs": {
+    "mtime": 1794673362.4754727,
+    "seen": 1795223812.011138,
+    "ast_hash": "4f3519daa5fc086497ddc7d3e41b18cf",
+    "semantic_hash": ""
+  },
+  "Services/FormulaConfigService.cs": {
+    "mtime": 1794232711.5229719,
+    "seen": 1795223812.011138,
+    "ast_hash": "ffcb68c455d6487aabd9de88759568ad",
+    "semantic_hash": ""
+  },
+  "Services/IAdminUserService.cs": {
+    "mtime": 1794220195.5304804,
+    "seen": 1795223812.011138,
+    "ast_hash": "04c9a1ba4759b3b3ae8448e0a6210d89",
+    "semantic_hash": ""
+  },
+  "Services/IAuditLogService.cs": {
+    "mtime": 1794246087.016825,
+    "seen": 1795223812.011138,
+    "ast_hash": "5b509b253649409958715290e8681617",
+    "semantic_hash": ""
+  },
+  "Services/IAuthService.cs": {
+    "mtime": 1794673362.476472,
+    "seen": 1795223812.011138,
+    "ast_hash": "1d24213042151d2e9679d7e4cc97160a",
+    "semantic_hash": ""
+  },
+  "Services/ICustomerService.cs": {
+    "mtime": 1794232223.4808867,
+    "seen": 1795223812.011138,
+    "ast_hash": "4a36981a2a550e23a116ead38fc9d986",
+    "semantic_hash": ""
+  },
+  "Services/IEmailService.cs": {
+    "mtime": 1794218741.5508347,
+    "seen": 1795223812.011138,
+    "ast_hash": "4d898a9c408b1a96bc2745c352572377",
+    "semantic_hash": ""
+  },
+  "Services/IFormulaConfigService.cs": {
+    "mtime": 1794232699.6292572,
+    "seen": 1795223812.011138,
+    "ast_hash": "1718b25aa70eef326f05df05cf7abdd2",
+    "semantic_hash": ""
+  },
+  "Services/IJobTitleService.cs": {
+    "mtime": 1794220264.9274392,
+    "seen": 1795223812.011138,
+    "ast_hash": "78cbc0549325b3ccd0a7a2f855c1a34d",
+    "semantic_hash": ""
+  },
+  "Services/IMachineryService.cs": {
+    "mtime": 1794232270.6496234,
+    "seen": 1795223812.011138,
+    "ast_hash": "8d7bcc43f0f50c043fbb489aa808cd7c",
+    "semantic_hash": ""
+  },
+  "Services/IMaterialService.cs": {
+    "mtime": 1794232314.6236753,
+    "seen": 1795223812.011138,
+    "ast_hash": "a4396528c5dfa4dacb0c6ca9eb165888",
+    "semantic_hash": ""
+  },
+  "Services/IMoqaysaService.cs": {
+    "mtime": 1794232375.905901,
+    "seen": 1795223812.011138,
+    "ast_hash": "e6b8b570bf480a70f8fe23ddad4235a5",
+    "semantic_hash": ""
+  },
+  "Services/IPaperCuttingCalculationService.cs": {
+    "mtime": 1794232205.7770877,
+    "seen": 1795223812.011138,
+    "ast_hash": "d9727fad226c50ee70a1cc8aa826eb4e",
+    "semantic_hash": ""
+  },
+  "Services/IPaymentOrderService.cs": {
+    "mtime": 1795219229.3069818,
+    "seen": 1795223812.011138,
+    "ast_hash": "aa13c4652dbe2261b6c575567a6f6585",
+    "semantic_hash": ""
+  },
+  "Services/IReportsService.cs": {
+    "mtime": 1794254243.141795,
+    "seen": 1795223812.011138,
+    "ast_hash": "7460505bf4f09f3041842effd2d0f268",
+    "semantic_hash": ""
+  },
+  "Services/ISuperAdminService.cs": {
+    "mtime": 1794224173.3045685,
+    "seen": 1795223812.011138,
+    "ast_hash": "0c6294a5ea58f187ef63cbc71757a487",
+    "semantic_hash": ""
+  },
+  "Services/ITafqeetService.cs": {
+    "mtime": 1794246050.8459377,
+    "seen": 1795223812.011138,
+    "ast_hash": "4cdd8a32d3b232f95684e357299f6962",
+    "semantic_hash": ""
+  },
+  "Services/ITasweyaService.cs": {
+    "mtime": 1794673362.4774714,
+    "seen": 1795223812.011138,
+    "ast_hash": "a1045bcad8e0a4082c4d263d7696669a",
+    "semantic_hash": ""
+  },
+  "Services/ITokenService.cs": {
+    "mtime": 1794218841.201772,
+    "seen": 1795223812.011138,
+    "ast_hash": "cb8f460341c007a760a56caaf355efd8",
+    "semantic_hash": ""
+  },
+  "Services/JobTitleService.cs": {
+    "mtime": 1795219229.307982,
+    "seen": 1795223812.011138,
+    "ast_hash": "da62df4c842235a540c1f8f2f1e5a1ba",
+    "semantic_hash": ""
+  },
+  "Services/MachineryService.cs": {
+    "mtime": 1795219229.308982,
+    "seen": 1795223812.011138,
+    "ast_hash": "9ba47036e94066a11a2c22d4e3e0001e",
+    "semantic_hash": ""
+  },
+  "Services/MaterialService.cs": {
+    "mtime": 1795219229.3099833,
+    "seen": 1795223812.011138,
+    "ast_hash": "988a4c36d0f6373e9d8bd12bc584cb81",
+    "semantic_hash": ""
+  },
+  "Services/MoqaysaCalculationInput.cs": {
+    "mtime": 1794232143.8070016,
+    "seen": 1795223812.011138,
+    "ast_hash": "7d442d5ccddb157c14d655cf47455fe5",
+    "semantic_hash": ""
+  },
+  "Services/MoqaysaCalculationResult.cs": {
+    "mtime": 1794351216.0800388,
+    "seen": 1795223812.011138,
+    "ast_hash": "1ed28c1a853c24bf94ab35d450357a2b",
+    "semantic_hash": ""
+  },
+  "Services/MoqaysaCalculationService.cs": {
+    "mtime": 1794353161.480577,
+    "seen": 1795223812.011138,
+    "ast_hash": "ea6e2462c419b75acae5e7301e992a37",
+    "semantic_hash": ""
+  },
+  "Services/MoqaysaService.cs": {
+    "mtime": 1795219229.3109844,
+    "seen": 1795223812.011138,
+    "ast_hash": "c4f72947f149bb6ce789a85eebe53ac5",
+    "semantic_hash": ""
+  },
+  "Services/PaperCuttingCalculationService.cs": {
+    "mtime": 1794237119.33297,
+    "seen": 1795223812.011138,
+    "ast_hash": "28dbecabfaea5b50860c117a092b5090",
+    "semantic_hash": ""
+  },
+  "Services/PaymentOrderService.cs": {
+    "mtime": 1795219229.311984,
+    "seen": 1795223812.011138,
+    "ast_hash": "ebf12a9c6146df75a684d9d871af15ca",
+    "semantic_hash": ""
+  },
+  "Services/PdfExportService.cs": {
+    "mtime": 1795219229.314442,
+    "seen": 1795223812.011138,
+    "ast_hash": "333d67ebad227b8e97f1f4523dbeb563",
+    "semantic_hash": ""
+  },
+  "Services/PermissionService.cs": {
+    "mtime": 1794272387.2671893,
+    "seen": 1795223812.011138,
+    "ast_hash": "d86549effd4753cd53c8e96a678b9e13",
+    "semantic_hash": ""
+  },
+  "Services/ReportsService.cs": {
+    "mtime": 1794673362.4834738,
+    "seen": 1795223812.011138,
+    "ast_hash": "a89f8c2f68c9751f4910ff72257f752d",
+    "semantic_hash": ""
+  },
+  "Services/SuperAdminService.cs": {
+    "mtime": 1794224185.9607441,
+    "seen": 1795223812.011138,
+    "ast_hash": "590b2637b9b2938e25b0809cffcea15c",
+    "semantic_hash": ""
+  },
+  "Services/SuperAdminTotpValidator.cs": {
+    "mtime": 1794219917.3447256,
+    "seen": 1795223812.011138,
+    "ast_hash": "3819aed89277078e51ea85b4792737d3",
+    "semantic_hash": ""
+  },
+  "Services/TafqeetService.cs": {
+    "mtime": 1794246071.93455,
+    "seen": 1795223812.011138,
+    "ast_hash": "4abf7d46cae143d796a89e0887391c2c",
+    "semantic_hash": ""
+  },
+  "Services/TasweyaCalculatedTotals.cs": {
+    "mtime": 1794246199.5543025,
+    "seen": 1795223812.011138,
+    "ast_hash": "f10ea7bf92c783ac5c0527430edb94a3",
+    "semantic_hash": ""
+  },
+  "Services/TasweyaService.cs": {
+    "mtime": 1795219229.3157203,
+    "seen": 1795223812.011138,
+    "ast_hash": "ee0990d64583245b1b89a715feb69342",
+    "semantic_hash": ""
+  },
+  "Services/TokenService.cs": {
+    "mtime": 1794673362.4854712,
+    "seen": 1795223812.011138,
+    "ast_hash": "202c89269b26512a8f7bf5ab1493ccbe",
+    "semantic_hash": ""
+  },
+  "Services/WordExportService.cs": {
+    "mtime": 1795223601.2146235,
+    "seen": 1795223812.011138,
+    "ast_hash": "f039b9ec3c51c7d67e79292de36a74a1",
+    "semantic_hash": ""
+  },
+  "ViewModels/AccountSummaryViewModel.cs": {
+    "mtime": 1794254181.153462,
+    "seen": 1795223812.011138,
+    "ast_hash": "5e24e9a26b321f61a81239bc73df8fda",
+    "semantic_hash": ""
+  },
+  "ViewModels/AccountViewModel.cs": {
+    "mtime": 1794245917.61096,
+    "seen": 1795223812.011138,
+    "ast_hash": "7c94aa64726a1c257d9a9fd495685cb5",
+    "semantic_hash": ""
+  },
+  "ViewModels/AuditBacklogViewModel.cs": {
+    "mtime": 1794224163.2696273,
+    "seen": 1795223812.011138,
+    "ast_hash": "0f393a89309b09ec7bcf6aa3f161dace",
+    "semantic_hash": ""
+  },
+  "ViewModels/AuthTokenViewModel.cs": {
+    "mtime": 1794218612.014222,
+    "seen": 1795223812.011138,
+    "ast_hash": "0d30b0552ba3b75a9f123bbcd63f28b4",
+    "semantic_hash": ""
+  },
+  "ViewModels/BudgetValidationResultViewModel.cs": {
+    "mtime": 1794245998.1358526,
+    "seen": 1795223812.011138,
+    "ast_hash": "e6265ba24123c04528b802b1ca2c3e3d",
+    "semantic_hash": ""
+  },
+  "ViewModels/CustomerMoqaysaSummaryViewModel.cs": {
+    "mtime": 1794254186.7412064,
+    "seen": 1795223812.011138,
+    "ast_hash": "9f1c959142ddf2c297404f5461bdef62",
+    "semantic_hash": ""
+  },
+  "ViewModels/CustomerSummaryViewModel.cs": {
+    "mtime": 1794254199.9461498,
+    "seen": 1795223812.011138,
+    "ast_hash": "a433a44a4b6c04c4f34b3ca7930a1293",
+    "semantic_hash": ""
+  },
+  "ViewModels/CustomerTasweyaSummaryViewModel.cs": {
+    "mtime": 1794254192.602131,
+    "seen": 1795223812.011138,
+    "ast_hash": "9497b41bb2893f202d03b7cd5559c070",
+    "semantic_hash": ""
+  },
+  "ViewModels/CustomerViewModel.cs": {
+    "mtime": 1794245922.5594087,
+    "seen": 1795223812.011138,
+    "ast_hash": "adb853f21dbdfc3b53ab1670f6c3747f",
+    "semantic_hash": ""
+  },
+  "ViewModels/EmployeeDetailViewModel.cs": {
+    "mtime": 1794218661.1771877,
+    "seen": 1795223812.011138,
+    "ast_hash": "adffab478604804dbbbe9fd6e2e00b8e",
+    "semantic_hash": ""
+  },
+  "ViewModels/EmployeeSummaryViewModel.cs": {
+    "mtime": 1794218654.9678957,
+    "seen": 1795223812.011138,
+    "ast_hash": "bef391bbc48719dea26f9c5be81bf3bd",
+    "semantic_hash": ""
+  },
+  "ViewModels/FormulaConfigViewModel.cs": {
+    "mtime": 1794232694.4272456,
+    "seen": 1795223812.011138,
+    "ast_hash": "ba004a8092b04c66ebe13ac72d211372",
+    "semantic_hash": ""
+  },
+  "ViewModels/JobTitleSummaryViewModel.cs": {
+    "mtime": 1794218671.5479848,
+    "seen": 1795223812.011138,
+    "ast_hash": "359b22946518f14a5ae60e2d12be1d7d",
+    "semantic_hash": ""
+  },
+  "ViewModels/LoginResponseViewModel.cs": {
+    "mtime": 1794218633.764563,
+    "seen": 1795223812.011138,
+    "ast_hash": "66d4ad92e78d21640b1a884df9ea4698",
+    "semantic_hash": ""
+  },
+  "ViewModels/MachineryViewModel.cs": {
+    "mtime": 1794232101.8171303,
+    "seen": 1795223812.011138,
+    "ast_hash": "204f2829cadfc4c706d6eae579f3bbe6",
+    "semantic_hash": ""
+  },
+  "ViewModels/MaterialViewModel.cs": {
+    "mtime": 1794232107.6712887,
+    "seen": 1795223812.011138,
+    "ast_hash": "9166062147b1cb37a13c7f5287f56346",
+    "semantic_hash": ""
+  },
+  "ViewModels/ModuleEffectivePermissionViewModel.cs": {
+    "mtime": 1794218695.0405633,
+    "seen": 1795223812.011138,
+    "ast_hash": "c383fd0c013bd822df3ecd4d6b92997e",
+    "semantic_hash": ""
+  },
+  "ViewModels/ModulePermissionViewModel.cs": {
+    "mtime": 1794218678.4759934,
+    "seen": 1795223812.011138,
+    "ast_hash": "142a56b7bcad68e2f67aed7e618071ee",
+    "semantic_hash": ""
+  },
+  "ViewModels/MoqaysaAccountShareViewModel.cs": {
+    "mtime": 1794673362.4864721,
+    "seen": 1795223812.011138,
+    "ast_hash": "fe494376db221b9a17aec1bd2125fa9e",
+    "semantic_hash": ""
+  },
+  "ViewModels/MoqaysaCalculationResultViewModel.cs": {
+    "mtime": 1794232086.4540741,
+    "seen": 1795223812.011138,
+    "ast_hash": "f482a131e511a48ec3ce8acd107af350",
+    "semantic_hash": ""
+  },
+  "ViewModels/MoqaysaDetailViewModel.cs": {
+    "mtime": 1794673362.4874723,
+    "seen": 1795223812.011138,
+    "ast_hash": "7fb07c78a01f02c738a13708e02a8f5b",
+    "semantic_hash": ""
+  },
+  "ViewModels/MoqaysaDetailedItemViewModel.cs": {
+    "mtime": 1794254212.8605385,
+    "seen": 1795223812.011138,
+    "ast_hash": "ae3079f593766537a83a6d7f009bc6c4",
+    "semantic_hash": ""
+  },
+  "ViewModels/MoqaysaMachineryItemViewModel.cs": {
+    "mtime": 1794232070.2372332,
+    "seen": 1795223812.011138,
+    "ast_hash": "b11118746e6aa2b8e7b5dc75fb60dd61",
+    "semantic_hash": ""
+  },
+  "ViewModels/MoqaysaMaterialItemViewModel.cs": {
+    "mtime": 1794232065.4026072,
+    "seen": 1795223812.011138,
+    "ast_hash": "4192e9095dda3e3eca7b79d0c4a08d74",
+    "semantic_hash": ""
+  },
+  "ViewModels/MoqaysaSummaryViewModel.cs": {
+    "mtime": 1794673362.4884715,
+    "seen": 1795223812.011138,
+    "ast_hash": "11507f11db39a08d6d9b8046b183b43e",
+    "semantic_hash": ""
+  },
+  "ViewModels/MoqaysatDetailedReportViewModel.cs": {
+    "mtime": 1794254216.4004266,
+    "seen": 1795223812.011138,
+    "ast_hash": "0062e8eda5a6de96ca7e8a525307d305",
+    "semantic_hash": ""
+  },
+  "ViewModels/MoqaysatDetailedTotalsViewModel.cs": {
+    "mtime": 1794254207.3541746,
+    "seen": 1795223812.011138,
+    "ast_hash": "3bea0c386db0b32418cd1b2c336ee710",
+    "semantic_hash": ""
+  },
+  "ViewModels/OperationStatusViewModel.cs": {
+    "mtime": 1794218719.6607008,
+    "seen": 1795223812.011138,
+    "ast_hash": "393763743c5e8fe1a85cf8f1a3c1173e",
+    "semantic_hash": ""
+  },
+  "ViewModels/PagedResultViewModel.cs": {
+    "mtime": 1794218732.323509,
+    "seen": 1795223812.011138,
+    "ast_hash": "6090dc78c1820a61d052e46553e05cba",
+    "semantic_hash": ""
+  },
+  "ViewModels/PaperCuttingCalculationResultViewModel.cs": {
+    "mtime": 1794232133.9488394,
+    "seen": 1795223812.011138,
+    "ast_hash": "803cd72fe7cb06cd0fbbaa7637ad3da6",
+    "semantic_hash": ""
+  },
+  "ViewModels/PaymentOrderDetailViewModel.cs": {
+    "mtime": 1794245985.7967227,
+    "seen": 1795223812.011138,
+    "ast_hash": "568a8b4b81734c448be5b909e961790a",
+    "semantic_hash": ""
+  },
+  "ViewModels/PaymentOrderOperationResultViewModel.cs": {
+    "mtime": 1794245990.4575398,
+    "seen": 1795223812.011138,
+    "ast_hash": "ee5bf8121b87ece070e71f29b828185f",
+    "semantic_hash": ""
+  },
+  "ViewModels/PaymentOrderRegisterItemViewModel.cs": {
+    "mtime": 1794254225.3720508,
+    "seen": 1795223812.011138,
+    "ast_hash": "34422b68a049d93f5c458456c51450cd",
+    "semantic_hash": ""
+  },
+  "ViewModels/PaymentOrderSummaryViewModel.cs": {
+    "mtime": 1794245979.0971084,
+    "seen": 1795223812.011138,
+    "ast_hash": "01894b6a1fb4f5b2c8cee4fcfe6f6058",
+    "semantic_hash": ""
+  },
+  "ViewModels/PaymentOrderTasweyaLinkViewModel.cs": {
+    "mtime": 1794254220.7368343,
+    "seen": 1795223812.011138,
+    "ast_hash": "e50bad27c1bb91f08ecccd2f8e977c9c",
+    "semantic_hash": ""
+  },
+  "ViewModels/RolePermissionsMatrixViewModel.cs": {
+    "mtime": 1794218685.789286,
+    "seen": 1795223812.011138,
+    "ast_hash": "471f27b7b495149179df75c4c3752ec4",
+    "semantic_hash": ""
+  },
+  "ViewModels/SuperAdminLoginResponseViewModel.cs": {
+    "mtime": 1794218646.7429657,
+    "seen": 1795223812.011138,
+    "ast_hash": "b1e38469bbbc74d07ab0e20c2db2ef79",
+    "semantic_hash": ""
+  },
+  "ViewModels/TasweyaAccountShareViewModel.cs": {
+    "mtime": 1795219229.3902884,
+    "seen": 1795223812.011138,
+    "ast_hash": "d8afcf871a22b7cb0c419468713d3efd",
+    "semantic_hash": ""
+  },
+  "ViewModels/TasweyaCreateResultViewModel.cs": {
+    "mtime": 1794673362.489472,
+    "seen": 1795223812.011138,
+    "ast_hash": "552855fcc037d65cafecbae598eba23b",
+    "semantic_hash": ""
+  },
+  "ViewModels/TasweyaDetailViewModel.cs": {
+    "mtime": 1795219229.3902884,
+    "seen": 1795223812.011138,
+    "ast_hash": "ed6fe62d1fe19ea061528dfd77b90c6b",
+    "semantic_hash": ""
+  },
+  "ViewModels/TasweyaMoqaysaItemViewModel.cs": {
+    "mtime": 1794673362.4904706,
+    "seen": 1795223812.011138,
+    "ast_hash": "ea975e8c2191f587146e4f07fe9578e4",
+    "semantic_hash": ""
+  },
+  "ViewModels/TasweyaSummaryViewModel.cs": {
+    "mtime": 1794245933.6778412,
+    "seen": 1795223812.011138,
+    "ast_hash": "a58f9a6af262ebfb4de589e5b5460299",
+    "semantic_hash": ""
+  },
+  "ViewModels/TasweyaUnsettledMoqaysaViewModel.cs": {
+    "mtime": 1794673362.4904706,
+    "seen": 1795223812.011138,
+    "ast_hash": "ddc0cc834fe9cd3e374d1947b462da61",
+    "semantic_hash": ""
+  },
+  "ViewModels/UnpaidTasweyaViewModel.cs": {
+    "mtime": 1795219229.391289,
+    "seen": 1795223812.011138,
+    "ast_hash": "d45cd1237596bc47cb31309f5fa41ba4",
+    "semantic_hash": ""
+  },
+  "ViewModels/UserPermissionOverrideViewModel.cs": {
+    "mtime": 1794218707.0819397,
+    "seen": 1795223812.011138,
+    "ast_hash": "6ea67386f465738226097a26a3e813d4",
+    "semantic_hash": ""
+  },
+  "ViewModels/UserProfileViewModel.cs": {
+    "mtime": 1794218623.8691862,
+    "seen": 1795223812.011138,
+    "ast_hash": "5c48b349f19fed06d0ed1bd57f13bc7a",
+    "semantic_hash": ""
+  },
+  "appsettings.Production.template.json": {
+    "mtime": 1795219229.3922877,
+    "seen": 1795223812.011138,
+    "ast_hash": "67fedee6f27cc42012da63a393e2278e",
+    "semantic_hash": ""
+  },
+  "appsettings.example.json": {
+    "mtime": 1795219229.39329,
+    "seen": 1795223812.011138,
+    "ast_hash": "767db93714eb6ec1b66ebab6f53ead1e",
+    "semantic_hash": ""
+  },
+  "dotnet-tools.json": {
+    "mtime": 1795219229.39329,
+    "seen": 1795223812.011138,
+    "ast_hash": "7eb5b5af5ea6943b65ebedcf372a1abf",
+    "semantic_hash": ""
+  },
+  "README.md": {
+    "mtime": 1793378557.84753,
+    "seen": 1795223812.011138,
+    "ast_hash": "84af888e6303c118d2d55463406ded37",
+    "semantic_hash": ""
+  },
+  "graphify-out/converted/Tasweya1_96d46410.md": {
+    "mtime": 1795223799.696483,
+    "seen": 1795223812.011138,
+    "ast_hash": "1f58fc8c17ccb0b0406a1908b43d6692",
+    "semantic_hash": ""
+  },
+  "graphify-out/converted/Tasweya2_65a8df97.md": {
+    "mtime": 1795223799.7942605,
+    "seen": 1795223812.011138,
+    "ast_hash": "d9fb862c1b39e9dcf169ceae0c0c30ec",
+    "semantic_hash": ""
+  },
+  "graphify-out/converted/Tasweya_Multi_eb52a332.md": {
+    "mtime": 1795223799.876471,
+    "seen": 1795223812.011138,
+    "ast_hash": "37511650ba239e29fb7c4fb4b3244301",
+    "semantic_hash": ""
+  },
+  "graphify-out/converted/Tasweya_Single_f3bc18a3.md": {
+    "mtime": 1795223799.9376197,
+    "seen": 1795223812.011138,
+    "ast_hash": "e264abbbc32a225f3d955b1f21bcc0ec",
+    "semantic_hash": ""
+  },
+  "graphify-out/converted/moqaysa_6a9b76ef.md": {
+    "mtime": 1795223800.1503265,
+    "seen": 1795223812.011138,
+    "ast_hash": "f6fe1f56ec873d31f8232b0ea6963b39",
+    "semantic_hash": ""
+  },
+  "assets/assiut-univ-logo.png": {
+    "mtime": 1794673362.4946096,
+    "seen": 1795223812.011138,
+    "ast_hash": "92b0ef27c50caa631879fe0a1b0140eb",
+    "semantic_hash": ""
+  }
+}
