@@ -19,13 +19,14 @@ public sealed class DocxTemplateFiller
     private const int LineHeight = 600;
     private const int LineBudget = 10400; // tasweya data rows shrink to keep one page
 
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte[]> PathTemplateCache = new();
+
     public byte[] Fill(string templatePath, IReadOnlyDictionary<string, object?> model)
     {
-        using var ms = new MemoryStream();
-        using (var fs = File.OpenRead(templatePath))
-        {
-            fs.CopyTo(ms);
-        }
+        byte[] templateBytes = PathTemplateCache.GetOrAdd(templatePath, File.ReadAllBytes);
+        using var ms = new MemoryStream(templateBytes.Length);
+        ms.Write(templateBytes, 0, templateBytes.Length);
+        ms.Position = 0;
 
         using (var doc = WordprocessingDocument.Open(ms, true))
         {
@@ -123,6 +124,15 @@ public sealed class DocxTemplateFiller
         }
     }
 
+    private static string SanitizeXml(string? input)
+    {
+        if (string.IsNullOrEmpty(input)) return string.Empty;
+        return new string(input.Where(ch =>
+            ch == 0x9 || ch == 0xA || ch == 0xD ||
+            (ch >= 0x20 && ch <= 0xD7FF) ||
+            (ch >= 0xE000 && ch <= 0xFFFD)).ToArray());
+    }
+
     private static string Resolve(string expr, IReadOnlyDictionary<string, object?> ctx)
     {
         var parts = expr.Trim().Split('.').ToList();
@@ -141,8 +151,8 @@ public sealed class DocxTemplateFiller
             if (cur is null) return "";
         }
 
-        if (cur is string str && str.Length == 0) return "";
-        if (suffix == null) return Convert.ToString(cur, CultureInfo.InvariantCulture) ?? "";
+        if (cur is string str) return str.Length == 0 ? "" : SanitizeXml(str);
+        if (suffix == null) return SanitizeXml(Convert.ToString(cur, CultureInfo.InvariantCulture) ?? "");
 
         var value = Math.Round(Convert.ToDecimal(cur, CultureInfo.InvariantCulture), 2, MidpointRounding.AwayFromZero);
         var g = decimal.Truncate(value);

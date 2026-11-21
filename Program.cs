@@ -180,6 +180,7 @@ builder.Services.AddScoped<IReportsService, ReportsService>();
 builder.Services.Configure<CentralPress.API.Documents.DocumentOptions>(builder.Configuration.GetSection(CentralPress.API.Documents.DocumentOptions.Section));
 builder.Services.AddSingleton<CentralPress.API.Documents.DocxTemplateFiller>();
 builder.Services.AddSingleton<CentralPress.API.Documents.PdfConverter>();
+builder.Services.AddHostedService<CentralPress.API.Documents.LibreOfficeWarmService>();
 builder.Services.AddScoped<CentralPress.API.Documents.IAmountInWords, CentralPress.API.Documents.TafqeetAmountInWords>();
 builder.Services.AddScoped<CentralPress.API.Documents.IPrintDataSource, CentralPress.API.Documents.EfPrintDataSource>();
 builder.Services.AddScoped<CentralPress.API.Documents.DocumentService>();
