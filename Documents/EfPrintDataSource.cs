@@ -34,13 +34,51 @@ public sealed class EfPrintDataSource(ApplicationDbContext context) : IPrintData
 
         var machineryLines = new List<MachineryLine>();
 
-        // 1. Include all items from the moqaysa in catalog order
-        var orderedMoqaysaItems = moqaysa.MachineryItems
+        // 1. Place entered machinery items into their official fixed catalog DisplayOrder slots
+        //    so partial selections (e.g. only طبع and قص) never scramble the template row order.
+        var remainingItems = moqaysa.MachineryItems
             .OrderBy(mi => mi.Machinery != null ? mi.Machinery.DisplayOrder : int.MaxValue)
             .ThenBy(mi => mi.MachineryId)
             .ToList();
 
-        foreach (var item in orderedMoqaysaItems)
+        foreach (var mac in activeCatalogMachineries)
+        {
+            var macName = mac.MachineryNameAr.Trim();
+            var matchIdx = remainingItems.FindIndex(mi =>
+                mi.MachineryId == mac.MachineryId ||
+                string.Equals(
+                    (!string.IsNullOrWhiteSpace(mi.MachineryNameSnapshot) ? mi.MachineryNameSnapshot : mi.Machinery?.MachineryNameAr)?.Trim(),
+                    macName,
+                    StringComparison.OrdinalIgnoreCase));
+
+            if (matchIdx >= 0)
+            {
+                var item = remainingItems[matchIdx];
+                remainingItems.RemoveAt(matchIdx);
+                machineryLines.Add(new MachineryLine(
+                    Name: !string.IsNullOrWhiteSpace(item.MachineryNameSnapshot) ? item.MachineryNameSnapshot : mac.MachineryNameAr,
+                    Hours: item.Hours,
+                    WorkerRate: item.WorkerHourlyRateSnapshot,
+                    WorkerValue: item.TotalWorkerWages,
+                    MachineHours: item.MachineHours,
+                    MachineRate: item.MachineHourlyRateSnapshot,
+                    MachineValue: item.TotalMachineOperatingCost));
+            }
+            else
+            {
+                machineryLines.Add(new MachineryLine(
+                    Name: mac.MachineryNameAr,
+                    Hours: 0m,
+                    WorkerRate: 0m,
+                    WorkerValue: 0m,
+                    MachineHours: 0m,
+                    MachineRate: 0m,
+                    MachineValue: 0m));
+            }
+        }
+
+        // 2. Append any historical/inactive/custom machinery items not in the active catalog
+        foreach (var item in remainingItems)
         {
             machineryLines.Add(new MachineryLine(
                 Name: !string.IsNullOrWhiteSpace(item.MachineryNameSnapshot) ? item.MachineryNameSnapshot : (item.Machinery?.MachineryNameAr ?? string.Empty),
@@ -52,38 +90,17 @@ public sealed class EfPrintDataSource(ApplicationDbContext context) : IPrintData
                 MachineValue: item.TotalMachineOperatingCost));
         }
 
-        // 2. Guarantee at least 11 rows (empty/inactive rows padded) if fewer were added/active
-        if (machineryLines.Count < MoqaysaTokens.MachinerySlots)
+        // 3. Guarantee at least 11 rows if the catalog has fewer active entries
+        while (machineryLines.Count < MoqaysaTokens.MachinerySlots)
         {
-            var usedNames = new HashSet<string>(machineryLines.Select(m => m.Name.Trim()), StringComparer.OrdinalIgnoreCase);
-            foreach (var mac in activeCatalogMachineries)
-            {
-                if (machineryLines.Count >= MoqaysaTokens.MachinerySlots) break;
-                if (!usedNames.Contains(mac.MachineryNameAr.Trim()))
-                {
-                    machineryLines.Add(new MachineryLine(
-                        Name: mac.MachineryNameAr,
-                        Hours: 0m,
-                        WorkerRate: 0m,
-                        WorkerValue: 0m,
-                        MachineHours: 0m,
-                        MachineRate: 0m,
-                        MachineValue: 0m));
-                    usedNames.Add(mac.MachineryNameAr.Trim());
-                }
-            }
-
-            while (machineryLines.Count < MoqaysaTokens.MachinerySlots)
-            {
-                machineryLines.Add(new MachineryLine(
-                    Name: string.Empty,
-                    Hours: 0m,
-                    WorkerRate: 0m,
-                    WorkerValue: 0m,
-                    MachineHours: 0m,
-                    MachineRate: 0m,
-                    MachineValue: 0m));
-            }
+            machineryLines.Add(new MachineryLine(
+                Name: string.Empty,
+                Hours: 0m,
+                WorkerRate: 0m,
+                WorkerValue: 0m,
+                MachineHours: 0m,
+                MachineRate: 0m,
+                MachineValue: 0m));
         }
 
         var materialLines = moqaysa.MaterialItems
@@ -95,7 +112,8 @@ public sealed class EfPrintDataSource(ApplicationDbContext context) : IPrintData
                 Total: m.TotalPrice))
             .ToList();
 
-        var unitPriceStr = decimal.TryParse(moqaysa.RequiredQuantityText, NumberStyles.Any, CultureInfo.InvariantCulture, out var parsedQty) && parsedQty > 0
+        var parsedQty = MoqaysaDraftPreviewRequest.ParseLeadingQuantity(moqaysa.RequiredQuantityText);
+        var unitPriceStr = parsedQty > 0m
             ? (moqaysa.FinalGrandTotal / parsedQty).ToString("0.00", CultureInfo.InvariantCulture)
             : moqaysa.FinalGrandTotal.ToString("0.00", CultureInfo.InvariantCulture);
 
@@ -140,6 +158,10 @@ public sealed class EfPrintDataSource(ApplicationDbContext context) : IPrintData
             .Include(t => t.Customer)
             .Include(t => t.MoqaysaLinks)
                 .ThenInclude(ml => ml.Moqaysa)
+                    .ThenInclude(m => m!.Customer)
+                        .ThenInclude(c => c!.Account)
+            .Include(t => t.MoqaysaLinks)
+                .ThenInclude(ml => ml.Moqaysa)
                     .ThenInclude(m => m!.AccountShares)
                         .ThenInclude(s => s.Account)
             .FirstOrDefaultAsync(t => t.TasweyaId == tasweyaOrMoqaysaId, ct);
@@ -159,6 +181,10 @@ public sealed class EfPrintDataSource(ApplicationDbContext context) : IPrintData
                     .AsNoTracking()
                     .Include(t => t.Account)
                     .Include(t => t.Customer)
+                    .Include(t => t.MoqaysaLinks)
+                        .ThenInclude(ml => ml.Moqaysa)
+                            .ThenInclude(m => m!.Customer)
+                                .ThenInclude(c => c!.Account)
                     .Include(t => t.MoqaysaLinks)
                         .ThenInclude(ml => ml.Moqaysa)
                             .ThenInclude(m => m!.AccountShares)
@@ -193,87 +219,156 @@ public sealed class EfPrintDataSource(ApplicationDbContext context) : IPrintData
                 });
         }
 
-        var linkedMoqaysa = tasweya.MoqaysaLinks
-            .Select(ml => ml.Moqaysa)
-            .FirstOrDefault(m => m != null);
+        var linkedMoqaysat = tasweya.MoqaysaLinks
+            .Where(ml => ml.Moqaysa != null)
+            .Select(ml => ml.Moqaysa!)
+            .GroupBy(m => m.MoqaysaId)
+            .Select(g => g.First())
+            .ToList();
 
-        var baseMoqaysa = linkedMoqaysa != null
-            ? await LoadMoqaysaAsync(linkedMoqaysa.MoqaysaId, ct)
-            : new MoqaysaPrintData(
-                JobOrderNo: tasweya.JobOrderNumbersText,
-                Requester: tasweya.Customer?.CustomerNameAr ?? string.Empty,
-                Quantity: "1",
-                UnitPrice: tasweya.SettlementGrandTotal.ToString("0.00", CultureInfo.InvariantCulture),
-                Specs: string.Empty,
-                Machinery: Array.Empty<MachineryLine>(),
-                Materials: Array.Empty<MaterialLine>(),
-                LabourTotal: tasweya.TotalWorkerWagesSum,
-                MachineryTotal: tasweya.TotalMachineCostsSum,
-                MatGross: tasweya.TotalMaterialsSum,
-                MatReturns: 0m,
-                MatNet: tasweya.TotalMaterialsSum,
-                OpsMaterials: 0m,
-                OpsFilms: 0m,
-                MaterialsTotal: tasweya.TotalMaterialsSum,
-                DirectCost: tasweya.TotalMaterialsSum + tasweya.TotalWorkerWagesSum + tasweya.TotalMachineCostsSum,
-                Admin: tasweya.AdminExpensesSum,
-                ExpensesTotal: tasweya.TotalMaterialsSum + tasweya.TotalWorkerWagesSum + tasweya.TotalMachineCostsSum + tasweya.AdminExpensesSum,
-                Percentage: tasweya.MarkupAmountSum,
-                Subtotal: tasweya.SettlementGrandTotal,
-                Ministry: tasweya.MinistryOfFinanceSum,
-                WorkersFund: tasweya.WorkersFundSum,
-                TotalA: tasweya.SettlementGrandTotal,
-                Other: tasweya.OtherAmountSum,
-                Revenue: tasweya.RevenuesTotal,
-                Vat: tasweya.VatTotal,
-                Total: tasweya.SettlementGrandTotal);
+        var firstLinkedMoqaysa = linkedMoqaysat.FirstOrDefault();
 
-        // Harmonize moqaysa totals with tasweya's stored figures if non-zero
-        var finalRevenue = tasweya.RevenuesTotal > 0 ? tasweya.RevenuesTotal : baseMoqaysa.Revenue;
-        var finalVat = tasweya.VatTotal > 0 ? tasweya.VatTotal : baseMoqaysa.Vat;
-        var finalTotal = tasweya.SettlementGrandTotal > 0 ? tasweya.SettlementGrandTotal : baseMoqaysa.Total;
+        var jobOrdersDisplay = !string.IsNullOrWhiteSpace(tasweya.JobOrderNumbersText)
+            ? tasweya.JobOrderNumbersText.Trim()
+            : string.Join(" ، ", linkedMoqaysat
+                .Select(m => m.JobOrderNumber)
+                .Where(j => !string.IsNullOrWhiteSpace(j))
+                .Distinct());
 
-        var mergedMoqaysa = baseMoqaysa with
+        var requesterName = !string.IsNullOrWhiteSpace(tasweya.Customer?.CustomerNameAr)
+            ? tasweya.Customer.CustomerNameAr
+            : (firstLinkedMoqaysa?.Customer?.CustomerNameAr ?? string.Empty);
+
+        var finalRevenue = tasweya.RevenuesTotal;
+        var finalVat = tasweya.VatTotal;
+        var finalTotal = tasweya.SettlementGrandTotal;
+
+        // Fallback only if a legacy/incomplete record stored 0 grand total
+        if (finalTotal <= 0m && linkedMoqaysat.Count > 0)
         {
-            MaterialsTotal = tasweya.TotalMaterialsSum > 0 ? tasweya.TotalMaterialsSum : baseMoqaysa.MaterialsTotal,
-            LabourTotal = tasweya.TotalWorkerWagesSum > 0 ? tasweya.TotalWorkerWagesSum : baseMoqaysa.LabourTotal,
-            MachineryTotal = tasweya.TotalMachineCostsSum > 0 ? tasweya.TotalMachineCostsSum : baseMoqaysa.MachineryTotal,
-            Admin = tasweya.AdminExpensesSum > 0 ? tasweya.AdminExpensesSum : baseMoqaysa.Admin,
-            Percentage = tasweya.MarkupAmountSum > 0 ? tasweya.MarkupAmountSum : baseMoqaysa.Percentage,
-            Ministry = tasweya.MinistryOfFinanceSum > 0 ? tasweya.MinistryOfFinanceSum : baseMoqaysa.Ministry,
-            WorkersFund = tasweya.WorkersFundSum > 0 ? tasweya.WorkersFundSum : baseMoqaysa.WorkersFund,
-            Other = tasweya.OtherAmountSum,
-            Revenue = finalRevenue,
-            Vat = finalVat,
-            Total = finalTotal
-        };
+            finalRevenue = linkedMoqaysat.Sum(m => m.SubTotal3);
+            finalVat = linkedMoqaysat.Sum(m => m.VatAmount);
+            finalTotal = linkedMoqaysat.Sum(m => m.FinalGrandTotal);
+        }
 
-        // Build account shares
-        var accounts = new List<AccountLine>();
-        var shares = linkedMoqaysa?.AccountShares?.Where(s => s.SharePercentage > 0).ToList();
-        if (shares != null && shares.Count > 1)
+        var mergedMoqaysa = new MoqaysaPrintData(
+            JobOrderNo: jobOrdersDisplay,
+            Requester: requesterName,
+            Quantity: "1",
+            UnitPrice: finalTotal.ToString("0.00", CultureInfo.InvariantCulture),
+            Specs: string.Empty,
+            Machinery: Array.Empty<MachineryLine>(),
+            Materials: Array.Empty<MaterialLine>(),
+            LabourTotal: tasweya.TotalWorkerWagesSum,
+            MachineryTotal: tasweya.TotalMachineCostsSum,
+            MatGross: tasweya.TotalMaterialsSum,
+            MatReturns: 0m,
+            MatNet: tasweya.TotalMaterialsSum,
+            OpsMaterials: 0m,
+            OpsFilms: 0m,
+            MaterialsTotal: tasweya.TotalMaterialsSum,
+            DirectCost: tasweya.TotalMaterialsSum + tasweya.TotalWorkerWagesSum + tasweya.TotalMachineCostsSum,
+            Admin: tasweya.AdminExpensesSum,
+            ExpensesTotal: tasweya.TotalMaterialsSum + tasweya.TotalWorkerWagesSum + tasweya.TotalMachineCostsSum + tasweya.AdminExpensesSum,
+            Percentage: tasweya.MarkupAmountSum,
+            Subtotal: finalTotal,
+            Ministry: tasweya.MinistryOfFinanceSum,
+            WorkersFund: tasweya.WorkersFundSum,
+            TotalA: finalTotal,
+            Other: tasweya.OtherAmountSum,
+            Revenue: finalRevenue,
+            Vat: finalVat,
+            Total: finalTotal);
+
+        // Build authoritative debit account list across ALL linked moqaysat so
+        // Single Account (Count == 1 -> Tasweya_Single.docx) vs Multi Account (Count > 1 -> Tasweya_Multi.docx)
+        // is always accurate even when a Tasweya spans multiple moqaysat.
+        var rawShareEntries = new List<(int AccountId, string AccountName, decimal Amount)>();
+        foreach (var m in linkedMoqaysat)
         {
-            decimal allocatedSum = 0m;
-            for (int i = 0; i < shares.Count; i++)
+            var mShares = m.AccountShares?.Where(s => s.SharePercentage > 0m || s.AllocatedAmount > 0m).ToList();
+            if (mShares != null && mShares.Count > 0)
             {
-                var s = shares[i];
-                var name = s.Account?.AccountNameAr ?? $"حساب #{s.AccountId}";
-                decimal amt;
-                if (i == shares.Count - 1)
+                foreach (var s in mShares)
                 {
-                    amt = finalTotal - allocatedSum;
+                    var name = s.Account?.AccountNameAr
+                        ?? (s.AccountId == tasweya.AccountId ? tasweya.Account?.AccountNameAr : null)
+                        ?? $"حساب #{s.AccountId}";
+                    var amt = s.AllocatedAmount > 0m
+                        ? s.AllocatedAmount
+                        : Math.Round(m.FinalGrandTotal * (s.SharePercentage / 100m), 2, MidpointRounding.AwayFromZero);
+                    rawShareEntries.Add((s.AccountId, name, amt));
+                }
+            }
+            else
+            {
+                var fallbackAccId = m.Customer?.AccountId ?? tasweya.AccountId;
+                var fallbackAccName = m.Customer?.Account?.AccountNameAr
+                    ?? tasweya.Account?.AccountNameAr
+                    ?? "العملاء";
+                rawShareEntries.Add((fallbackAccId, fallbackAccName, m.FinalGrandTotal));
+            }
+        }
+
+        var groupedAccounts = rawShareEntries
+            .GroupBy(e => e.AccountId)
+            .Select(g => (AccountId: g.Key, Name: g.First().AccountName, Amount: g.Sum(x => x.Amount)))
+            .ToList();
+
+        // Check if this Tasweya is a legacy single-account split where another active Tasweya covers the remaining share
+        bool isSplitSingleAccountTasweya = false;
+        if (groupedAccounts.Count > 1 && linkedMoqaysat.Count > 0)
+        {
+            var linkedIds = linkedMoqaysat.Select(m => m.MoqaysaId).ToList();
+            bool hasOtherActiveTasweya = await context.TasweyaMoqaysaLinks
+                .AsNoTracking()
+                .AnyAsync(l => linkedIds.Contains(l.MoqaysaId)
+                            && l.TasweyaId != tasweya.TasweyaId
+                            && l.Tasweya != null
+                            && l.Tasweya.IsActive, ct);
+            decimal fullMoqaysatSum = linkedMoqaysat.Sum(m => m.FinalGrandTotal);
+            if (hasOtherActiveTasweya && Math.Abs(finalTotal - fullMoqaysatSum) > 1m)
+            {
+                isSplitSingleAccountTasweya = true;
+            }
+        }
+
+        var accounts = new List<AccountLine>();
+        if (!isSplitSingleAccountTasweya && groupedAccounts.Count > 1)
+        {
+            decimal rawSum = groupedAccounts.Sum(a => a.Amount);
+            decimal allocatedSum = 0m;
+            for (int i = 0; i < groupedAccounts.Count; i++)
+            {
+                var acc = groupedAccounts[i];
+                decimal amt;
+                if (i == groupedAccounts.Count - 1)
+                {
+                    amt = Math.Round(finalTotal - allocatedSum, 2, MidpointRounding.AwayFromZero);
+                }
+                else if (rawSum > 0m)
+                {
+                    amt = Math.Round(finalTotal * (acc.Amount / rawSum), 2, MidpointRounding.AwayFromZero);
+                    allocatedSum += amt;
                 }
                 else
                 {
-                    amt = Math.Round(finalTotal * (s.SharePercentage / 100m), 2, MidpointRounding.AwayFromZero);
+                    amt = Math.Round(finalTotal / groupedAccounts.Count, 2, MidpointRounding.AwayFromZero);
                     allocatedSum += amt;
                 }
-                accounts.Add(new AccountLine(name, amt));
+                accounts.Add(new AccountLine(acc.Name, amt));
             }
+        }
+        else if (!isSplitSingleAccountTasweya && groupedAccounts.Count == 1)
+        {
+            accounts.Add(new AccountLine(groupedAccounts[0].Name, finalTotal));
         }
         else
         {
-            var singleName = tasweya.Account?.AccountNameAr ?? linkedMoqaysa?.AccountShares?.FirstOrDefault()?.Account?.AccountNameAr ?? "العملاء";
+            var singleName = tasweya.Account?.AccountNameAr
+                ?? groupedAccounts.FirstOrDefault(a => a.AccountId == tasweya.AccountId).Name
+                ?? groupedAccounts.FirstOrDefault().Name
+                ?? "العملاء";
             accounts.Add(new AccountLine(singleName, finalTotal));
         }
 
@@ -283,5 +378,29 @@ public sealed class EfPrintDataSource(ApplicationDbContext context) : IPrintData
             ClaimNo: tasweya.ClaimNumber,
             Moqaysa: mergedMoqaysa,
             Accounts: accounts);
+    }
+
+    public async Task<IReadOnlyList<int>> LoadLinkedMoqaysaIdsAsync(int tasweyaId, CancellationToken ct)
+    {
+        return await context.TasweyaMoqaysaLinks
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(l => l.TasweyaId == tasweyaId)
+            .OrderBy(l => l.LinkId)
+            .Select(l => l.MoqaysaId)
+            .Distinct()
+            .ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<string>> LoadActiveMachineryNamesAsync(CancellationToken ct)
+    {
+        return await context.Machineries
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(m => m.IsActive)
+            .OrderBy(m => m.DisplayOrder)
+            .ThenBy(m => m.MachineryId)
+            .Select(m => m.MachineryNameAr)
+            .ToListAsync(ct);
     }
 }
