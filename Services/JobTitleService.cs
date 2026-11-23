@@ -211,7 +211,7 @@ public class JobTitleService : IJobTitleService
         var assignedCount = await _context.Users.CountAsync(u => u.JobTitleId == id, cancellationToken);
         if (assignedCount > 0)
         {
-            return (false, $"لا يمكن حذف المسمى الوظيفي لوجود ({assignedCount}) موظف مسند إليه حالياً. يرجى إعادة تعيين الموظفين أولاً.");
+            return (false, $"لا يمكن حذف المسمى الوظيفي لوجود ({CentralPress.API.Helpers.ArabicDigits.FormatInteger(assignedCount, grouping: false)}) موظف مسند إليه حالياً. يرجى إعادة تعيين الموظفين أولاً.");
         }
 
         // HIGH-22: Transactional deletion with provider safety check

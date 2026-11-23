@@ -24,7 +24,7 @@ public class EmailService : IEmailService
         _logger.LogInformation("[EMAIL DISPATCH] Password Reset Code dispatched for {Name} ({Email})", employeeName, email);
 
         var safeName = WebUtility.HtmlEncode(employeeName);
-        var safeCode = WebUtility.HtmlEncode(resetCode);
+        var safeCode = WebUtility.HtmlEncode(CentralPress.API.Helpers.ArabicDigits.ToArabic(resetCode));
         var subject = "مطبعة جامعة أسيوط - رمز استعادة كلمة المرور";
         var bodyHtml = $@"
             <div dir=""rtl"" style=""font-family: 'Segoe UI', Tahoma, -apple-system, BlinkMacSystemFont, Roboto, sans-serif; max-width: 620px; margin: 20px auto; background-color: #ffffff; border: 1px solid #cbd5e1; border-radius: 18px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.08); color: #0f172a;"">
@@ -55,7 +55,7 @@ public class EmailService : IEmailService
                             {safeCode}
                         </div>
                         <div style=""font-size: 12px; font-weight: 700; color: #047857 !important; margin-top: 10px;"">
-                            ⏱️ هذا الرمز صالح لمدة 15 دقيقة فقط للاستخدام لمرة واحدة
+                            ⏱️ هذا الرمز صالح لمدة ١٥ دقيقة فقط للاستخدام لمرة واحدة
                         </div>
                     </div>
 
@@ -229,7 +229,7 @@ public class EmailService : IEmailService
                                     <span style=""color: #1e293b !important; font-weight: 800;"">توقيت الإرسال:</span>
                                 </td>
                                 <td style=""padding: 8px 0; font-family: monospace; font-size: 13px; font-weight: 700; color: #475569 !important;"">
-                                    <span style=""color: #475569 !important; font-weight: 700;"">{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC</span>
+                                    <span style=""color: #475569 !important; font-weight: 700;"">{CentralPress.API.Helpers.ArabicDigits.FormatDate(DateTime.UtcNow, "yyyy-MM-dd HH:mm:ss")} ت.ع.م</span>
                                 </td>
                             </tr>
                         </table>

@@ -55,7 +55,7 @@ public class FormulaConfigService : IFormulaConfigService
             {
                 throw new ArgumentOutOfRangeException(
                     nameof(item.DefaultPercentage),
-                    $"النسبة الافتراضية ({item.DefaultPercentage}) يجب أن تكون بين 0 و 100%");
+                    $"النسبة الافتراضية ({CentralPress.API.Helpers.ArabicDigits.FormatCompactDecimal(item.DefaultPercentage)}) يجب أن تكون بين ٠ و ١٠٠%");
             }
 
             // Validate WorkersFundBaseMode if provided
@@ -76,10 +76,11 @@ public class FormulaConfigService : IFormulaConfigService
                 var tokens = item.AllowedOptionsCsv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
                 foreach (var token in tokens)
                 {
-                    if (!decimal.TryParse(token, NumberStyles.Any, CultureInfo.InvariantCulture, out var opt) || opt < 0m || opt > 100m)
+                    var normalizedToken = CentralPress.API.Helpers.ArabicDigits.NormalizeToAscii(token);
+                    if (!decimal.TryParse(normalizedToken, NumberStyles.Any, CultureInfo.InvariantCulture, out var opt) || opt < 0m || opt > 100m)
                     {
                         throw new ArgumentException(
-                            $"القيمة '{token}' في الخيارات المسموحة غير صالحة. يجب أن تكون كل قيمة رقماً بين 0 و 100",
+                            $"القيمة '{CentralPress.API.Helpers.ArabicDigits.ToArabic(token)}' في الخيارات المسموحة غير صالحة. يجب أن تكون كل قيمة رقماً بين ٠ و ١٠٠",
                             nameof(item.AllowedOptionsCsv));
                     }
                 }

@@ -133,7 +133,7 @@ public class MoqaysaCalculationService
     {
         if (percent < 0m || percent > 100m)
         {
-            throw new ArgumentOutOfRangeException(paramName, $"النسبة المئوية ({percent}) يجب أن تكون بين 0 و 100");
+            throw new ArgumentOutOfRangeException(paramName, $"النسبة المئوية ({CentralPress.API.Helpers.ArabicDigits.FormatCompactDecimal(percent)}) يجب أن تكون بين ٠ و ١٠٠");
         }
     }
 }

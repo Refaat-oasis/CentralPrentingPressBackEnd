@@ -41,6 +41,18 @@ public sealed class EfPrintDataSource(ApplicationDbContext context) : IPrintData
             .ThenBy(mi => mi.MachineryId)
             .ToList();
 
+        static decimal ResolveMachineHours(MoqaysaMachineryItem item)
+        {
+            if (item.MachineHours > 0m) return item.MachineHours;
+            if (item.TotalMachineOperatingCost > 0m)
+            {
+                return item.MachineHourlyRateSnapshot > 0m
+                    ? Math.Round(item.TotalMachineOperatingCost / item.MachineHourlyRateSnapshot, 2, MidpointRounding.AwayFromZero)
+                    : item.Hours;
+            }
+            return 0m;
+        }
+
         foreach (var mac in activeCatalogMachineries)
         {
             var macName = mac.MachineryNameAr.Trim();
@@ -60,7 +72,7 @@ public sealed class EfPrintDataSource(ApplicationDbContext context) : IPrintData
                     Hours: item.Hours,
                     WorkerRate: item.WorkerHourlyRateSnapshot,
                     WorkerValue: item.TotalWorkerWages,
-                    MachineHours: item.MachineHours,
+                    MachineHours: ResolveMachineHours(item),
                     MachineRate: item.MachineHourlyRateSnapshot,
                     MachineValue: item.TotalMachineOperatingCost));
             }
@@ -85,7 +97,7 @@ public sealed class EfPrintDataSource(ApplicationDbContext context) : IPrintData
                 Hours: item.Hours,
                 WorkerRate: item.WorkerHourlyRateSnapshot,
                 WorkerValue: item.TotalWorkerWages,
-                MachineHours: item.MachineHours,
+                MachineHours: ResolveMachineHours(item),
                 MachineRate: item.MachineHourlyRateSnapshot,
                 MachineValue: item.TotalMachineOperatingCost));
         }

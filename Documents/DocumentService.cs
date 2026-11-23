@@ -122,9 +122,10 @@ public sealed class DocumentService(
     public static string SanitizeFileName(string name)
     {
         if (string.IsNullOrWhiteSpace(name)) return "document";
+        var normalized = Helpers.ArabicDigits.NormalizeToAscii(name);
         var invalid = Path.GetInvalidFileNameChars();
-        var clean = new string(name.Select(c => invalid.Contains(c) || c == '/' || c == '\\' ? '_' : c).ToArray());
-        return clean.Trim();
+        var clean = new string(normalized.Select(c => invalid.Contains(c) || c == '/' || c == '\\' ? '_' : c).ToArray()).Trim();
+        return string.IsNullOrWhiteSpace(clean) ? "document" : clean;
     }
 
     private async Task<RenderedDocument> Pack(byte[] docx, string name, DocFormat format, CancellationToken ct, string? templateName = null)

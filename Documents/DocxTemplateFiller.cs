@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
+using CentralPress.API.Helpers;
 using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
@@ -206,11 +207,17 @@ public sealed class DocxTemplateFiller
                 for (int bi = 0; bi < bodyRows.Count; bi++)
                 {
                     var r = bodyRows[bi];
+                    var rowCells = r.Elements<TableCell>().ToList();
+                    var c0Len = rowCells.Count > 0 ? rowCells[0].InnerText.Trim().Length : 0;
+                    var c8Len = rowCells.Count > 8 ? rowCells[8].InnerText.Trim().Length : 0;
+                    bool needsWrapSafety = c0Len > 16 || c8Len > 28;
+
                     uint h = (uint)Math.Max(220, (int)Math.Round(desiredHeights[bi] * scale));
                     var rPr = r.TableRowProperties ?? r.PrependChild(new TableRowProperties());
                     var trHeight = rPr.GetFirstChild<TableRowHeight>() ?? rPr.AppendChild(new TableRowHeight());
                     trHeight.Val = new UInt32Value(h);
-                    trHeight.HeightType = HeightRuleValues.Exact;
+                    // Use AtLeast on rows with long machinery/material names so wrapped 2nd lines are never clipped behind the bottom border
+                    trHeight.HeightType = needsWrapSafety ? HeightRuleValues.AtLeast : HeightRuleValues.Exact;
                 }
 
                 // Vertically center ALL data & total rows (R05..R46), cap inflated paragraph-mark font sizes (e.g. sz=36),
@@ -249,15 +256,27 @@ public sealed class DocxTemplateFiller
                                 CapFontSize(pmRPr, 24);
                             }
 
-                            // Keep machinery label column (C0) at <= 13pt (26), preserving 11pt (22) on long labels
-                            // like 'م. تشغيل الخامات' so Arabic letters stay crisp inside borders and dotted lines.
+                            // Auto-scale machinery label column (C0) by character length so even long custom DB names
+                            // (e.g. 'ماكينة طباعة رقمية ملونة') fit cleanly without wrapping behind the bottom border.
                             if (ci == 0)
                             {
                                 var trimmedLabel = cell.InnerText.Trim();
-                                int maxLabelHalfPts = trimmedLabel.Length >= 15 ? 22 : 26;
+                                int maxLabelHalfPts = trimmedLabel.Length switch
+                                {
+                                    > 22 => 16, // 8pt
+                                    > 16 => 18, // 9pt
+                                    >= 15 => 22, // 11pt (e.g. 'م. تشغيل الخامات')
+                                    _ => 26      // 13pt (short official names like 'زنك'..'سلفنة')
+                                };
                                 foreach (var runRPr in p.Descendants<RunProperties>())
                                 {
                                     CapFontSize(runRPr, maxLabelHalfPts);
+                                }
+                                if (trimmedLabel.Length > 16)
+                                {
+                                    if (pmRPr != null) CapFontSize(pmRPr, maxLabelHalfPts);
+                                    spacing.Line = "200";
+                                    spacing.LineRule = LineSpacingRuleValues.Auto;
                                 }
 
                                 // Align 'جملة الخامات' centered to match all other 14 summary total labels in C0
@@ -266,6 +285,19 @@ public sealed class DocxTemplateFiller
                                     var jc = pPr.Justification ?? pPr.AppendChild(new Justification());
                                     jc.Val = JustificationValues.Center;
                                 }
+                            }
+                            else if (ci == 8 && cell.InnerText.Trim().Length > 28)
+                            {
+                                // Auto-scale unusually long material descriptions in 'إسم الصنف'
+                                int matLen = cell.InnerText.Trim().Length;
+                                int maxMatHalfPts = matLen > 38 ? 16 : 18;
+                                foreach (var runRPr in p.Descendants<RunProperties>())
+                                {
+                                    CapFontSize(runRPr, maxMatHalfPts);
+                                }
+                                if (pmRPr != null) CapFontSize(pmRPr, maxMatHalfPts);
+                                spacing.Line = "200";
+                                spacing.LineRule = LineSpacingRuleValues.Auto;
                             }
                             else
                             {
@@ -375,16 +407,16 @@ public sealed class DocxTemplateFiller
 
                     var tcMar = tcPr.GetFirstChild<TableCellMargin>() ?? tcPr.AppendChild(new TableCellMargin());
                     var startMar = tcMar.GetFirstChild<StartMargin>();
-                    if (startMar == null || !int.TryParse(startMar.Width?.Value, out int sw) || sw < 90)
+                    if (startMar == null || !int.TryParse(startMar.Width?.Value, out int sw) || sw < 65)
                     {
                         if (startMar != null) startMar.Remove();
-                        tcMar.AppendChild(new StartMargin { Width = "90", Type = TableWidthUnitValues.Dxa });
+                        tcMar.AppendChild(new StartMargin { Width = "65", Type = TableWidthUnitValues.Dxa });
                     }
                     var rightMar = tcMar.GetFirstChild<RightMargin>();
-                    if (rightMar == null || !int.TryParse(rightMar.Width?.Value, out int rw) || rw < 90)
+                    if (rightMar == null || !int.TryParse(rightMar.Width?.Value, out int rw) || rw < 65)
                     {
                         if (rightMar != null) rightMar.Remove();
-                        tcMar.AppendChild(new RightMargin { Width = "90", Type = TableWidthUnitValues.Dxa });
+                        tcMar.AppendChild(new RightMargin { Width = "65", Type = TableWidthUnitValues.Dxa });
                     }
                     NormalizeTableCellMarginOrder(tcMar);
                     NormalizeTableCellPropertiesOrder(tcPr);
@@ -395,8 +427,8 @@ public sealed class DocxTemplateFiller
                         if (jcVal == JustificationValues.Start || jcVal == JustificationValues.Right)
                         {
                             var ind = pPr.Indentation ?? pPr.AppendChild(new Indentation());
-                            ind.Start = "60";
-                            ind.Right = "60";
+                            ind.Start = "35";
+                            ind.Right = "35";
                             NormalizeParagraphPropertiesOrder(pPr);
                         }
                     }
@@ -717,8 +749,11 @@ public sealed class DocxTemplateFiller
 
     private static bool IsZero(IReadOnlyDictionary<string, object?> m, string key) =>
         !m.TryGetValue(key, out var v) || v is null || (v is string s && s.Length == 0) ||
-        (decimal.TryParse(Convert.ToString(v, CultureInfo.InvariantCulture), NumberStyles.Any,
-                          CultureInfo.InvariantCulture, out var d) && d == 0m);
+        (decimal.TryParse(
+            ArabicDigits.NormalizeToAscii(Convert.ToString(v, CultureInfo.InvariantCulture)),
+            NumberStyles.Any,
+            CultureInfo.InvariantCulture,
+            out var d) && d == 0m);
 
     private static void Replace(OpenXmlElement scope, IReadOnlyDictionary<string, object?> ctx, string? strip)
     {
@@ -758,12 +793,14 @@ public sealed class DocxTemplateFiller
             if (cur is null) return "";
         }
 
-        if (cur is string str) return str.Length == 0 ? "" : SanitizeXml(str);
-        if (suffix == null) return SanitizeXml(Convert.ToString(cur, CultureInfo.InvariantCulture) ?? "");
+        if (cur is string str) return str.Length == 0 ? "" : ArabicDigits.ToArabicPreservingTechnical(SanitizeXml(str));
+        if (suffix == null) return ArabicDigits.ToArabic(SanitizeXml(Convert.ToString(cur, CultureInfo.InvariantCulture) ?? ""));
 
         var value = Math.Round(Convert.ToDecimal(cur, CultureInfo.InvariantCulture), 2, MidpointRounding.AwayFromZero);
         var g = decimal.Truncate(value);
         var q = (int)Math.Abs((value - g) * 100m);
-        return suffix == "G" ? g.ToString("#,##0", CultureInfo.InvariantCulture) : q.ToString("00", CultureInfo.InvariantCulture);
+        return suffix == "G"
+            ? ArabicDigits.ToArabic(g.ToString("#,##0", CultureInfo.InvariantCulture))
+            : ArabicDigits.ToArabic(q.ToString("00", CultureInfo.InvariantCulture));
     }
 }

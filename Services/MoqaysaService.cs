@@ -157,7 +157,7 @@ public class MoqaysaService : IMoqaysaService
             }).ToList();
 
             string summaryText = shareVms.Count > 0
-                ? string.Join(" ، ", shareVms.Select(s => $"{s.AccountNameAr} ({s.SharePercentage}%)"))
+                ? string.Join(" ، ", shareVms.Select(s => $"{s.AccountNameAr} ({CentralPress.API.Helpers.ArabicDigits.FormatCompactDecimal(s.SharePercentage)}%)"))
                 : string.Empty;
 
             bool isPartialTasweya = shareVms.Any(s => s.IsIncludedInTasweya) && !m.IsIncludedInTasweya;
@@ -227,7 +227,7 @@ public class MoqaysaService : IMoqaysaService
         ArgumentNullException.ThrowIfNull(dto);
         if (string.IsNullOrWhiteSpace(dto.JobOrderNumber))
         {
-            dto.JobOrderNumber = $"{DateTime.UtcNow:yyyyMMdd}-{Random.Shared.Next(100, 999)}";
+            dto.JobOrderNumber = CentralPress.API.Helpers.ArabicDigits.ToArabic($"{DateTime.UtcNow:yyyyMMdd}-{Random.Shared.Next(100, 999)}");
         }
 
         var customer = await _context.Customers
@@ -315,6 +315,7 @@ public class MoqaysaService : IMoqaysaService
                 MachineryId = mac.MachineryId,
                 MachineryNameSnapshot = mac.MachineryNameSnapshot?.Trim() ?? "آلة",
                 Hours = workerHours,
+                MachineHours = machineHours,
                 WorkerHourlyRateSnapshot = mac.WorkerHourlyRateSnapshot,
                 TotalWorkerWages = wCost,
                 MachineHourlyRateSnapshot = mac.MachineHourlyRateSnapshot,
@@ -434,6 +435,7 @@ public class MoqaysaService : IMoqaysaService
                 MachineryId = mac.MachineryId,
                 MachineryNameSnapshot = mac.MachineryNameSnapshot?.Trim() ?? "آلة",
                 Hours = workerHours,
+                MachineHours = machineHours,
                 WorkerHourlyRateSnapshot = mac.WorkerHourlyRateSnapshot,
                 TotalWorkerWages = wCost,
                 MachineHourlyRateSnapshot = mac.MachineHourlyRateSnapshot,
@@ -466,7 +468,7 @@ public class MoqaysaService : IMoqaysaService
         if (shares != null && shares.Count > 0)
         {
             if (shares.Any(s => s.SharePercentage <= 0m || s.SharePercentage > 100m))
-                throw new InvalidOperationException("يجب أن تكون نسبة كل حساب دافع أكبر من 0% ولا تتجاوز 100%.");
+                throw new InvalidOperationException("يجب أن تكون نسبة كل حساب دافع أكبر من ٠% ولا تتجاوز ١٠٠%.");
 
             var requestedIds = shares.Select(s => s.AccountId).ToList();
             if (requestedIds.Distinct().Count() != requestedIds.Count)
@@ -474,7 +476,7 @@ public class MoqaysaService : IMoqaysaService
 
             decimal totalPct = shares.Sum(s => s.SharePercentage);
             if (Math.Abs(totalPct - 100m) > 0.01m)
-                throw new InvalidOperationException($"مجموع نسب الحسابات الدافعة يجب أن يساوي 100%. المجموع الحالي: {totalPct}%");
+                throw new InvalidOperationException($"مجموع نسب الحسابات الدافعة يجب أن يساوي ١٠٠%. المجموع الحالي: {CentralPress.API.Helpers.ArabicDigits.FormatCompactDecimal(totalPct)}%");
 
             var existingCount = await _context.Accounts
                 .CountAsync(a => a.IsActive && requestedIds.Contains(a.AccountId), ct);
@@ -727,6 +729,13 @@ public class MoqaysaService : IMoqaysaService
                     MachineryId = mac.MachineryId,
                     MachineryNameSnapshot = mac.MachineryNameSnapshot,
                     Hours = mac.Hours,
+                    MachineHours = mac.MachineHours > 0m
+                        ? mac.MachineHours
+                        : (mac.TotalMachineOperatingCost > 0m
+                            ? (mac.MachineHourlyRateSnapshot > 0m
+                                ? Math.Round(mac.TotalMachineOperatingCost / mac.MachineHourlyRateSnapshot, 2, MidpointRounding.AwayFromZero)
+                                : mac.Hours)
+                            : 0m),
                     WorkerHourlyRateSnapshot = mac.WorkerHourlyRateSnapshot,
                     TotalWorkerWages = mac.TotalWorkerWages,
                     MachineHourlyRateSnapshot = mac.MachineHourlyRateSnapshot,

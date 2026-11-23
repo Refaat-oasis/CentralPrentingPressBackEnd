@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Collections.Generic;
 using System.IO;
@@ -111,18 +111,18 @@ public class PdfExportService
                             }
                             c.Item().Text("جامعة أسيوط").Bold().FontSize(10);
                             c.Item().Text("مطبعة الجامعة المركزية").Bold().FontSize(11);
-                            c.Item().Text($"الجهة الطالبة: {m.Customer?.CustomerNameAr ?? "غير محدد"}").FontSize(8.5f);
+                            c.Item().Text($"الجهة الطالبة: {ArabicDigits.ToArabicPreservingTechnical(m.Customer?.CustomerNameAr ?? "غير محدد")}").FontSize(8.5f);
                             if (!string.IsNullOrWhiteSpace(m.SpecificationsText))
                             {
-                                c.Item().Text($"المواصفات: {m.SpecificationsText}").FontSize(7.5f);
+                                c.Item().Text($"المواصفات: {ArabicDigits.ToArabicPreservingTechnical(m.SpecificationsText)}").FontSize(7.5f);
                             }
                         });
 
                         // Center: Job Order Number and Quantity
                         row.RelativeItem(3).AlignCenter().Column(c =>
                         {
-                            c.Item().Text($"مقايسة لإذن تشغيل رقم ( {m.JobOrderNumber} )").Bold().FontSize(12).Underline();
-                            c.Item().PaddingTop(2).Text($"الكمية المطلوبة: {m.RequiredQuantityText} (سعر النسخة: {finalUnitPrice:N2} ج.م)").Bold().FontSize(8.5f);
+                            c.Item().Text($"مقايسة لإذن تشغيل رقم ( {ArabicDigits.ToArabicPreservingTechnical(m.JobOrderNumber)} )").Bold().FontSize(12).Underline();
+                            c.Item().PaddingTop(2).Text($"الكمية المطلوبة: {ArabicDigits.ToArabicPreservingTechnical(m.RequiredQuantityText)} (سعر النسخة: {ArabicDigits.FormatDecimal(finalUnitPrice)} ج.م)").Bold().FontSize(8.5f);
                         });
 
                         // Left: Press Seal / ISO Box with TLV Verification
@@ -204,8 +204,8 @@ public class PdfExportService
                     // Helper to render a material cell block on left (4 sub-columns: Name, Qty, UnitPrice, Total)
                     void RenderMaterialCells(MoqaysaMaterialItem? mat)
                     {
-                        table.Cell().Border(0.5f).Padding(1).AlignRight().Text(mat?.MaterialNameSnapshot ?? "").FontSize(7);
-                        table.Cell().Border(0.5f).Padding(1).AlignCenter().Text(mat != null && mat.Quantity > 0 ? mat.Quantity.ToString("G") : "").FontSize(7);
+                        table.Cell().Border(0.5f).Padding(1).AlignRight().Text(ArabicDigits.ToArabicPreservingTechnical(mat?.MaterialNameSnapshot ?? "")).FontSize(7);
+                        table.Cell().Border(0.5f).Padding(1).AlignCenter().Text(mat != null && mat.Quantity > 0 ? ArabicDigits.FormatCompactDecimal(mat.Quantity) : "").FontSize(7);
                         RenderPoundPiaster(table, mat?.UnitPrice ?? 0, blankIfZero: true);
                         RenderPoundPiaster(table, mat?.TotalPrice ?? 0, blankIfZero: true);
                     }
@@ -227,8 +227,8 @@ public class PdfExportService
                         bool hasWorker = mac != null && (mac.Hours > 0 || mac.TotalWorkerWages > 0);
 
                         // Right: Worker wages (Hours in Time, Rate in Hourly, Wages in جزئي, كلي left empty per Image 1)
-                        table.Cell().Border(0.5f).Padding(1).AlignRight().Text(mac?.MachineryNameSnapshot ?? "").FontSize(7);
-                        table.Cell().Border(0.5f).Padding(1).AlignCenter().Text(mac != null && mac.Hours > 0 ? mac.Hours.ToString("G") : "").FontSize(7);
+                        table.Cell().Border(0.5f).Padding(1).AlignRight().Text(ArabicDigits.ToArabicPreservingTechnical(mac?.MachineryNameSnapshot ?? "")).FontSize(7);
+                        table.Cell().Border(0.5f).Padding(1).AlignCenter().Text(mac != null && mac.Hours > 0 ? ArabicDigits.FormatCompactDecimal(mac.Hours) : "").FontSize(7);
                         RenderPoundPiaster(table, hasWorker ? mac!.WorkerHourlyRateSnapshot : 0m, blankIfZero: true);
                         RenderPoundPiaster(table, hasWorker ? mac!.TotalWorkerWages : 0m, blankIfZero: true);
                         RenderEmptyCells(table, 2);
@@ -267,8 +267,8 @@ public class PdfExportService
                         // Right: Machine Operating (Hours in Time, Rate in Hourly, Cost in جزئي, كلي left empty per Image 1)
                         decimal mHours = mac != null ? (mac.MachineHours > 0 ? mac.MachineHours : mac.Hours) : 0m;
                         bool hasMachine = mac != null && (mHours > 0 || mac.TotalMachineOperatingCost > 0);
-                        table.Cell().Border(0.5f).Padding(1).AlignRight().Text(mac?.MachineryNameSnapshot ?? "").FontSize(7);
-                        table.Cell().Border(0.5f).Padding(1).AlignCenter().Text(mHours > 0 ? mHours.ToString("G") : "").FontSize(7);
+                        table.Cell().Border(0.5f).Padding(1).AlignRight().Text(ArabicDigits.ToArabicPreservingTechnical(mac?.MachineryNameSnapshot ?? "")).FontSize(7);
+                        table.Cell().Border(0.5f).Padding(1).AlignCenter().Text(mHours > 0 ? ArabicDigits.FormatCompactDecimal(mHours) : "").FontSize(7);
                         RenderPoundPiaster(table, hasMachine ? mac!.MachineHourlyRateSnapshot : 0m, blankIfZero: true);
                         RenderPoundPiaster(table, hasMachine ? mac!.TotalMachineOperatingCost : 0m, blankIfZero: true);
                         RenderEmptyCells(table, 2);
@@ -277,7 +277,7 @@ public class PdfExportService
                         if (i == macCount - 1 && materials.Count > Math.Max(24, maxMainMaterialsCount))
                         {
                             table.Cell().ColumnSpan(6).Border(0.5f).Background(Colors.Grey.Lighten4).Padding(1).AlignCenter()
-                                .Text($"يوجد {materials.Count - maxMainMaterialsCount} خامة إضافية مبيّنة بالملحق (ص 2)").Bold().FontSize(7);
+                                .Text($"يوجد {ArabicDigits.FormatInteger(materials.Count - maxMainMaterialsCount, grouping: false)} خامة إضافية مبيّنة بالملحق (ص ٢)").Bold().FontSize(7);
                         }
                         else
                         {
@@ -336,8 +336,8 @@ public class PdfExportService
                     RenderEmptyCells(table, 5);
                     RenderPoundPiaster(table, m.TotalMaterials, isBold: true);
 
-                    // Cascade 5: الإجمالي (1)
-                    table.Cell().Border(0.5f).Padding(1).AlignRight().Text("الإجمالي (1)").Bold();
+                    // Cascade 5: الإجمالي (١)
+                    table.Cell().Border(0.5f).Padding(1).AlignRight().Text("الإجمالي (١)").Bold();
                     RenderEmptyCells(table, 5);
                     RenderPoundPiaster(table, m.SubTotal1, isBold: true);
 
@@ -371,8 +371,8 @@ public class PdfExportService
                     RenderEmptyCells(table, 5);
                     RenderPoundPiaster(table, m.WorkersSyndicateFund);
 
-                    // Cascade 12: الإجمالي (2)
-                    table.Cell().Border(0.5f).Background(Colors.Grey.Lighten5).Padding(1).AlignRight().Text("الإجمالي (2)").Bold();
+                    // Cascade 12: الإجمالي (٢)
+                    table.Cell().Border(0.5f).Background(Colors.Grey.Lighten5).Padding(1).AlignRight().Text("الإجمالي (٢)").Bold();
                     RenderEmptyCells(table, 5);
                     RenderPoundPiaster(table, m.SubTotal2, isBold: true);
 
@@ -381,15 +381,15 @@ public class PdfExportService
                     RenderEmptyCells(table, 5);
                     RenderPoundPiaster(table, m.OtherAmount, showDashIfZero: !m.ApplyOther);
 
-                    // Cascade 14: إجمالي (3)
-                    table.Cell().Border(0.5f).Padding(1).AlignRight().Text("إجمالي (3)").Bold();
+                    // Cascade 14: إجمالي (٣)
+                    table.Cell().Border(0.5f).Padding(1).AlignRight().Text("إجمالي (٣)").Bold();
                     RenderEmptyCells(table, 5);
                     RenderPoundPiaster(table, m.SubTotal3, isBold: true);
 
-                    // Cascade 14.5: ضريبة القيمة المضافة (14%) - moved to كلي per Image 1
+                    // Cascade 14.5: ضريبة القيمة المضافة (١٤%) - moved to كلي per Image 1
                     if (renderVat)
                     {
-                        table.Cell().Border(0.5f).Padding(1).AlignRight().Text("ض. القيمة المضافة (14%)").Bold();
+                        table.Cell().Border(0.5f).Padding(1).AlignRight().Text("ض. القيمة المضافة (١٤%)").Bold();
                         RenderEmptyCells(table, 5);
                         RenderPoundPiaster(table, m.VatAmount);
                     }
@@ -432,8 +432,8 @@ public class PdfExportService
                         col.Item().Row(r =>
                         {
                             r.RelativeItem().AlignRight().Text("جامعة أسيوط - مطبعة الجامعة المركزية").Bold().FontSize(10);
-                            r.RelativeItem().AlignCenter().Text($"ملحق تفصيلي لخامات مقايسة رقم ( {m.JobOrderNumber} )").Bold().FontSize(12).Underline();
-                            r.RelativeItem().AlignLeft().Text($"الجهة: {m.Customer?.CustomerNameAr ?? "—"}").FontSize(8.5f);
+                            r.RelativeItem().AlignCenter().Text($"ملحق تفصيلي لخامات مقايسة رقم ( {ArabicDigits.ToArabicPreservingTechnical(m.JobOrderNumber)} )").Bold().FontSize(12).Underline();
+                            r.RelativeItem().AlignLeft().Text($"الجهة: {ArabicDigits.ToArabicPreservingTechnical(m.Customer?.CustomerNameAr ?? "—")}").FontSize(8.5f);
                         });
                         col.Item().PaddingTop(3).LineHorizontal(0.5f);
                     });
@@ -461,16 +461,16 @@ public class PdfExportService
                         int idx = 1;
                         foreach (var mat in materials)
                         {
-                            tbl.Cell().Border(0.5f).Padding(2).AlignCenter().Text(idx.ToString());
-                            tbl.Cell().Border(0.5f).Padding(2).AlignRight().Text(mat.MaterialNameSnapshot ?? "—");
-                            tbl.Cell().Border(0.5f).Padding(2).AlignCenter().Text(mat.Quantity.ToString("G"));
-                            tbl.Cell().Border(0.5f).Padding(2).AlignCenter().Text(mat.UnitPrice.ToString("N2"));
-                            tbl.Cell().Border(0.5f).Padding(2).AlignCenter().Text(mat.TotalPrice.ToString("N2"));
+                            tbl.Cell().Border(0.5f).Padding(2).AlignCenter().Text(ArabicDigits.FormatInteger(idx, grouping: false));
+                            tbl.Cell().Border(0.5f).Padding(2).AlignRight().Text(ArabicDigits.ToArabicPreservingTechnical(mat.MaterialNameSnapshot ?? "—"));
+                            tbl.Cell().Border(0.5f).Padding(2).AlignCenter().Text(ArabicDigits.FormatCompactDecimal(mat.Quantity));
+                            tbl.Cell().Border(0.5f).Padding(2).AlignCenter().Text(ArabicDigits.FormatDecimal(mat.UnitPrice));
+                            tbl.Cell().Border(0.5f).Padding(2).AlignCenter().Text(ArabicDigits.FormatDecimal(mat.TotalPrice));
                             idx++;
                         }
 
                         tbl.Cell().ColumnSpan(4).Border(0.5f).Background(Colors.Grey.Lighten3).Padding(3).AlignRight().Text("إجمالي قيمة كافة الخامات:").Bold();
-                        tbl.Cell().Border(0.5f).Background(Colors.Grey.Lighten3).Padding(3).AlignCenter().Text($"{m.RawMaterials:N2} ج.م").Bold();
+                        tbl.Cell().Border(0.5f).Background(Colors.Grey.Lighten3).Padding(3).AlignCenter().Text($"{ArabicDigits.FormatDecimal(m.RawMaterials)} ج.م").Bold();
                     });
 
                     annex.Footer().AlignCenter().Text(text =>
@@ -487,7 +487,7 @@ public class PdfExportService
     private static decimal ParseQuantity(string? text)
     {
         if (string.IsNullOrWhiteSpace(text)) return 0m;
-        var clean = text.Replace(",", "").Replace("،", "").Trim();
+        var clean = ArabicDigits.NormalizeToAscii(text).Replace(",", "").Trim();
         var match = System.Text.RegularExpressions.Regex.Match(clean, @"\d+(\.\d+)?");
         if (match.Success && decimal.TryParse(match.Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var qty))
         {
@@ -526,11 +526,11 @@ public class PdfExportService
         long p = totalPiasters / 100L;
         long pi = totalPiasters % 100L;
 
-        string piText = (pi == 0 && p > 0) ? "-" : pi.ToString("D2");
+        string piText = (pi == 0 && p > 0) ? "-" : ArabicDigits.FormatPiasters((int)pi);
         var cPi = table.Cell().Border(0.5f).Padding(1).AlignCenter().Text(piText).FontSize(7);
         if (isBold) cPi.Bold();
 
-        var cP = table.Cell().Border(0.5f).Padding(1).AlignCenter().Text(p.ToString("N0")).FontSize(7);
+        var cP = table.Cell().Border(0.5f).Padding(1).AlignCenter().Text(ArabicDigits.FormatInteger(p)).FontSize(7);
         if (isBold) cP.Bold();
     }
 
@@ -585,9 +585,9 @@ public class PdfExportService
 
                         r.RelativeItem().AlignLeft().Column(c =>
                         {
-                            c.Item().Text($"رقم التسوية: {t.SettlementNumber}").Bold();
-                            c.Item().Text($"بتاريخ: {t.SettlementDate:yyyy/MM/dd}").Bold();
-                            c.Item().Text($"مطالبة رقم: {t.ClaimNumber}").Bold();
+                            c.Item().Text($"رقم التسوية: {ArabicDigits.ToArabicPreservingTechnical(t.SettlementNumber)}").Bold();
+                            c.Item().Text($"بتاريخ: {ArabicDigits.FormatDate(t.SettlementDate, "yyyy/MM/dd")}").Bold();
+                            c.Item().Text($"مطالبة رقم: {ArabicDigits.ToArabicPreservingTechnical(t.ClaimNumber)}").Bold();
                         });
                     });
                     col.Item().PaddingTop(2).LineHorizontal(0.5f);
@@ -690,17 +690,17 @@ public class PdfExportService
                     RenderPoundPiaster(table, t.SettlementGrandTotal, isBold: true);
                     table.Cell().Border(0.5f).Padding(1).AlignCenter().Text("ـــــ").FontSize(7);
                     table.Cell().Border(0.5f).Padding(1).AlignCenter().Text("ــــــــ").FontSize(7);
-                    table.Cell().Border(0.5f).Padding(1).AlignRight().Text($"إذن تشغيل رقم : {t.JobOrderNumbersText}");
+                    table.Cell().Border(0.5f).Padding(1).AlignRight().Text($"إذن تشغيل رقم : {ArabicDigits.ToArabicPreservingTechnical(t.JobOrderNumbersText)}");
                     RenderEmptyCells(table, 4);
 
                     // Line 3: الجهة
                     RenderEmptyCells(table, 4);
-                    table.Cell().Border(0.5f).Padding(1).AlignRight().Text($"الجهة : {t.Customer?.CustomerNameAr}");
+                    table.Cell().Border(0.5f).Padding(1).AlignRight().Text($"الجهة : {ArabicDigits.ToArabicPreservingTechnical(t.Customer?.CustomerNameAr)}");
                     RenderEmptyCells(table, 4);
 
                     // Line 4: مطالبة رقم
                     RenderEmptyCells(table, 4);
-                    table.Cell().Border(0.5f).Padding(1).AlignRight().Text($"مطالبة رقم : {t.ClaimNumber}");
+                    table.Cell().Border(0.5f).Padding(1).AlignRight().Text($"مطالبة رقم : {ArabicDigits.ToArabicPreservingTechnical(t.ClaimNumber)}");
                     RenderEmptyCells(table, 4);
 
                     // Line 5: إلى مذكورين
@@ -831,13 +831,13 @@ public class PdfExportService
                             r.RelativeItem().Text(t =>
                             {
                                 t.Span("رقم أمر الدفع : ").Bold();
-                                t.Span(p.PaymentOrderNumber ?? "—").Bold().Underline();
+                                t.Span(ArabicDigits.ToArabicPreservingTechnical(p.PaymentOrderNumber ?? "—")).Bold().Underline();
                             });
 
                             r.RelativeItem().Text(t =>
                             {
                                 t.Span("تاريخ أمر الدفع : ").Bold();
-                                t.Span($"{p.PaymentDate:yyyy-MM-dd}");
+                                t.Span(ArabicDigits.FormatDate(p.PaymentDate, "yyyy-MM-dd"));
                             });
                         });
 
@@ -899,12 +899,12 @@ public class PdfExportService
                             long pVal = linkTotalPiasters / 100L;
                             int piVal = (int)(linkTotalPiasters % 100L);
 
-                            table.Cell().Border(1).Padding(3).AlignCenter().Text(idx.ToString()).FontSize(9);
-                            table.Cell().Border(1).Padding(3).AlignCenter().Text(link.Tasweya?.SettlementNumber ?? "—").Bold().FontSize(9);
-                            table.Cell().Border(1).Padding(3).AlignCenter().Text(link.Tasweya?.ClaimNumber ?? "—").FontSize(9);
-                            table.Cell().Border(1).Padding(3).AlignRight().PaddingRight(4).Text(link.Tasweya?.Customer?.CustomerNameAr ?? "—").FontSize(9);
-                            table.Cell().Border(1).Padding(3).AlignCenter().Text(piVal.ToString("D2")).FontSize(9);
-                            table.Cell().Border(1).Padding(3).AlignCenter().Text(pVal.ToString()).FontSize(9);
+                            table.Cell().Border(1).Padding(3).AlignCenter().Text(ArabicDigits.FormatInteger(idx, grouping: false)).FontSize(9);
+                            table.Cell().Border(1).Padding(3).AlignCenter().Text(ArabicDigits.ToArabicPreservingTechnical(link.Tasweya?.SettlementNumber ?? "—")).Bold().FontSize(9);
+                            table.Cell().Border(1).Padding(3).AlignCenter().Text(ArabicDigits.ToArabicPreservingTechnical(link.Tasweya?.ClaimNumber ?? "—")).FontSize(9);
+                            table.Cell().Border(1).Padding(3).AlignRight().PaddingRight(4).Text(ArabicDigits.ToArabicPreservingTechnical(link.Tasweya?.Customer?.CustomerNameAr ?? "—")).FontSize(9);
+                            table.Cell().Border(1).Padding(3).AlignCenter().Text(ArabicDigits.FormatPiasters(piVal)).FontSize(9);
+                            table.Cell().Border(1).Padding(3).AlignCenter().Text(ArabicDigits.FormatInteger(pVal)).FontSize(9);
 
                             idx++;
                         }
@@ -915,8 +915,8 @@ public class PdfExportService
                         int totPi = (int)(orderTotalPiasters % 100L);
 
                         table.Cell().ColumnSpan(4).Border(1.5f).Background(Colors.Grey.Lighten3).Padding(4).AlignRight().PaddingRight(6).Text("إجمالي المبلغ المسدد بأمر الدفع :").Bold().FontSize(10);
-                        table.Cell().Border(1.5f).Background(Colors.Grey.Lighten3).Padding(4).AlignCenter().Text(totPi.ToString("D2")).Bold().FontSize(10);
-                        table.Cell().Border(1.5f).Background(Colors.Grey.Lighten3).Padding(4).AlignCenter().Text(totP.ToString()).Bold().FontSize(10);
+                        table.Cell().Border(1.5f).Background(Colors.Grey.Lighten3).Padding(4).AlignCenter().Text(ArabicDigits.FormatPiasters(totPi)).Bold().FontSize(10);
+                        table.Cell().Border(1.5f).Background(Colors.Grey.Lighten3).Padding(4).AlignCenter().Text(ArabicDigits.FormatInteger(totP)).Bold().FontSize(10);
                     });
 
                     // Tafqeet Box

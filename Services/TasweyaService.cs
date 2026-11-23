@@ -471,7 +471,7 @@ public class TasweyaService : ITasweyaService
                            t.SettlementDate >= fy.StartDate &&
                            t.SettlementDate <= fy.EndDate, ct);
         if (existsInFy)
-            return (false, $"رقم كشف التسوية '{finalSettlementNumber}' مسجل بالفعل ضمن السنة المالية ({fy.Code}). يرجى استخدام رقم آخر.", null);
+            return (false, $"رقم كشف التسوية '{CentralPress.API.Helpers.ArabicDigits.ToArabicPreservingTechnical(finalSettlementNumber)}' مسجل بالفعل ضمن السنة المالية ({CentralPress.API.Helpers.ArabicDigits.ToArabic(fy.Code)}). يرجى استخدام رقم آخر.", null);
 
         var moqaysat = await _context.Moqaysat
             .Include(m => m.Customer)
@@ -726,7 +726,7 @@ public class TasweyaService : ITasweyaService
                            t.SettlementDate >= fy.StartDate &&
                            t.SettlementDate <= fy.EndDate, ct);
         if (existsInFy)
-            return (false, $"رقم كشف التسوية '{finalSettlementNumber}' مسجل بالفعل في كشف تسوية آخر ضمن السنة المالية ({fy.Code}). يرجى استخدام رقم آخر.", null);
+            return (false, $"رقم كشف التسوية '{CentralPress.API.Helpers.ArabicDigits.ToArabicPreservingTechnical(finalSettlementNumber)}' مسجل بالفعل في كشف تسوية آخر ضمن السنة المالية ({CentralPress.API.Helpers.ArabicDigits.ToArabic(fy.Code)}). يرجى استخدام رقم آخر.", null);
 
         if (dto.MoqaysaIds == null || dto.MoqaysaIds.Count == 0)
             return (false, "يرجى تحديد مقايسة واحدة على الأقل", null);

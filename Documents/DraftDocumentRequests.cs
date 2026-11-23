@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
+using CentralPress.API.Helpers;
 
 namespace CentralPress.API.Documents;
 
@@ -49,6 +50,19 @@ public sealed record MoqaysaDraftPreviewRequest(
         var remainingDraftItems = (MachineryItems ?? []).ToList();
         var machineryLines = new List<MachineryLine>();
 
+        static decimal ResolveDraftMachineHours(DraftMachineryItemDto m)
+        {
+            var mh = m.MachineHours ?? m.Hours;
+            if (mh > 0m) return mh;
+            if (m.TotalMachineOperatingCost > 0m)
+            {
+                return m.MachineHourlyRateSnapshot > 0m
+                    ? Math.Round(m.TotalMachineOperatingCost / m.MachineHourlyRateSnapshot, 2, MidpointRounding.AwayFromZero)
+                    : m.Hours;
+            }
+            return 0m;
+        }
+
         if (activeCatalogMachineryNames != null && activeCatalogMachineryNames.Count > 0)
         {
             foreach (var catalogName in activeCatalogMachineryNames)
@@ -68,7 +82,7 @@ public sealed record MoqaysaDraftPreviewRequest(
                         Hours: m.Hours,
                         WorkerRate: m.WorkerHourlyRateSnapshot,
                         WorkerValue: m.TotalWorkerWages,
-                        MachineHours: m.MachineHours ?? m.Hours,
+                        MachineHours: ResolveDraftMachineHours(m),
                         MachineRate: m.MachineHourlyRateSnapshot,
                         MachineValue: m.TotalMachineOperatingCost));
                 }
@@ -86,7 +100,7 @@ public sealed record MoqaysaDraftPreviewRequest(
                 Hours: m.Hours,
                 WorkerRate: m.WorkerHourlyRateSnapshot,
                 WorkerValue: m.TotalWorkerWages,
-                MachineHours: m.MachineHours ?? m.Hours,
+                MachineHours: ResolveDraftMachineHours(m),
                 MachineRate: m.MachineHourlyRateSnapshot,
                 MachineValue: m.TotalMachineOperatingCost));
         }
@@ -143,7 +157,7 @@ public sealed record MoqaysaDraftPreviewRequest(
     internal static decimal ParseLeadingQuantity(string? text)
     {
         if (string.IsNullOrWhiteSpace(text)) return 0m;
-        var clean = text.Replace(",", "").Replace("،", "").Trim();
+        var clean = ArabicDigits.NormalizeToAscii(text).Replace(",", "").Trim();
         var match = Regex.Match(clean, @"\d+(\.\d+)?");
         return match.Success && decimal.TryParse(match.Value, NumberStyles.Any, CultureInfo.InvariantCulture, out var q)
             ? q

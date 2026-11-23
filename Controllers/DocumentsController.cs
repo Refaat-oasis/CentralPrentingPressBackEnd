@@ -1,6 +1,8 @@
 using CentralPress.API.Documents;
+using CentralPress.API.Helpers;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Net.Http.Headers;
 
 namespace CentralPress.API.Controllers;
 
@@ -36,7 +38,7 @@ public sealed class DocumentsController(DocumentService documents) : ControllerB
             return Task.FromResult<IActionResult>(BadRequest(new { message = "يجب تحديد مستند واحد على الأقل للدمج." }));
 
         if (tasweyaIds.Count + moqaysaIds.Count > 50)
-            return Task.FromResult<IActionResult>(BadRequest(new { message = "الحد الأقصى للدمج في الطلب الواحد هو 50 مستنداً." }));
+            return Task.FromResult<IActionResult>(BadRequest(new { message = "الحد الأقصى للدمج في الطلب الواحد هو ٥٠ مستنداً." }));
 
         return Run(() => documents.RenderBundleAsync(tasweyaIds, moqaysaIds, request?.FileName, ct));
     }
@@ -84,9 +86,7 @@ public sealed class DocumentsController(DocumentService documents) : ControllerB
             ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             : "application/pdf";
         var disposition = docFormat == DocFormat.Pdf ? "inline" : "attachment";
-        var cleanFileName = DocumentService.SanitizeFileName($"PaymentOrder_{id}.{ext}");
-        Response.Headers.ContentDisposition = $"{disposition}; filename=\"{cleanFileName}\"";
-        return new FileContentResult(bytes, mime);
+        return RespondDocument(bytes, mime, $"PaymentOrder_{id}.{ext}", null, disposition);
     }
 
     private static DocFormat Parse(string f) =>
@@ -98,13 +98,7 @@ public sealed class DocumentsController(DocumentService documents) : ControllerB
         {
             var doc = await render();
             var disposition = doc.ContentType == "application/pdf" ? "inline" : "attachment";
-            var cleanFileName = DocumentService.SanitizeFileName(doc.FileName);
-            Response.Headers.ContentDisposition = $"{disposition}; filename=\"{cleanFileName}\"";
-            if (!string.IsNullOrWhiteSpace(doc.TemplateName))
-            {
-                Response.Headers["X-Document-Template"] = doc.TemplateName;
-            }
-            return new FileContentResult(doc.Bytes, doc.ContentType);
+            return RespondDocument(doc.Bytes, doc.ContentType, doc.FileName, doc.TemplateName, disposition);
         }
         catch (PrintDataException ex)
         {
@@ -114,5 +108,60 @@ public sealed class DocumentsController(DocumentService documents) : ControllerB
         {
             return NotFound(new { message = ex.Message });
         }
+    }
+
+    private IActionResult RespondDocument(
+        byte[] bytes,
+        string contentType,
+        string fileName,
+        string? templateName,
+        string dispositionType)
+    {
+        var cleanFileName = DocumentService.SanitizeFileName(fileName);
+        var cleanTemplate = string.IsNullOrWhiteSpace(templateName)
+            ? null
+            : ToAsciiHeaderValue(templateName);
+
+        // Wrap bytes in JSON when the SPA requests base64 transport so browser download managers
+        // (e.g. IDM) do not intercept PDF responses and zero out fetch().blob() bodies.
+        if (string.Equals(Request.Headers["X-Preview-Transport"], "base64", StringComparison.OrdinalIgnoreCase))
+        {
+            return Ok(new
+            {
+                contentType,
+                fileName = cleanFileName,
+                templateName = cleanTemplate,
+                base64 = Convert.ToBase64String(bytes),
+            });
+        }
+
+        SetContentDisposition(dispositionType, cleanFileName);
+        if (!string.IsNullOrWhiteSpace(cleanTemplate))
+        {
+            Response.Headers["X-Document-Template"] = cleanTemplate;
+        }
+        return new FileContentResult(bytes, contentType);
+    }
+
+    private void SetContentDisposition(string dispositionType, string cleanFileName)
+    {
+        var asciiSafe = ToAsciiHeaderValue(cleanFileName, fallback: "document.pdf");
+        var header = new ContentDispositionHeaderValue(dispositionType);
+        header.SetHttpFileName(asciiSafe);
+        if (!string.Equals(asciiSafe, cleanFileName, StringComparison.Ordinal))
+        {
+            header.FileNameStar = cleanFileName;
+        }
+        Response.Headers.ContentDisposition = header.ToString();
+    }
+
+    private static string ToAsciiHeaderValue(string value, string fallback = "")
+    {
+        var ascii = ArabicDigits.NormalizeToAscii(value);
+        var filtered = new string(ascii
+            .Select(c => c >= 0x20 && c <= 0x7E && c != '"' && c != '\\' && c != '/' && c != ';' ? c : '_')
+            .ToArray())
+            .Trim();
+        return string.IsNullOrWhiteSpace(filtered) ? fallback : filtered;
     }
 }

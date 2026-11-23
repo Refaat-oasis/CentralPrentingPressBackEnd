@@ -42,7 +42,7 @@ public static class FinancialYearHelper
         if (string.IsNullOrWhiteSpace(rawNumber))
             return string.Empty;
 
-        string trimmed = rawNumber.Trim();
+        string trimmed = ArabicDigits.ToArabicPreservingTechnical(rawNumber.Trim());
 
         // If it already contains a slash, dash with year, or letters, keep as specified by operator
         if (trimmed.Contains('/') || trimmed.Contains('-') || trimmed.Contains('\\'))
@@ -52,7 +52,7 @@ public static class FinancialYearHelper
 
         // If it's a bare number (e.g. "55"), append the starting calendar year of the financial period
         var fy = GetFinancialYear(settlementDate);
-        return $"{trimmed} / {fy.StartYear}";
+        return $"{trimmed} / {ArabicDigits.FormatInteger(fy.StartYear, grouping: false)}";
     }
 }
 

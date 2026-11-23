@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using CentralPress.API.Entities;
+using CentralPress.API.Helpers;
 using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
@@ -167,7 +168,7 @@ public class WordExportService
                     if (mat != null)
                     {
                         SetCellText(cells[8], SanitizeXml(mat.MaterialNameSnapshot), JustificationValues.Right);
-                        SetCellText(cells[9], mat.Quantity > 0 ? mat.Quantity.ToString("G") : "", JustificationValues.Center);
+                        SetCellText(cells[9], mat.Quantity > 0 ? ArabicDigits.FormatCompactDecimal(mat.Quantity) : "", JustificationValues.Center);
                         SetPoundPiaster(cells[10], cells[11], mat.UnitPrice, blankIfZero: true);
                         SetPoundPiaster(cells[12], cells[13], mat.TotalPrice, blankIfZero: true);
                     }
@@ -189,7 +190,7 @@ public class WordExportService
                     bool hasWorker = mac != null && (mac.Hours > 0m || mac.TotalWorkerWages > 0m);
 
                     SetCellText(cells[0], mac != null ? SanitizeXml(mac.MachineryNameSnapshot) : "", JustificationValues.Right, bold: true);
-                    SetCellText(cells[1], mac != null && mac.Hours > 0m ? mac.Hours.ToString("G") : "", JustificationValues.Center);
+                    SetCellText(cells[1], mac != null && mac.Hours > 0m ? ArabicDigits.FormatCompactDecimal(mac.Hours) : "", JustificationValues.Center);
                     SetPoundPiaster(cells[2], cells[3], hasWorker ? mac!.WorkerHourlyRateSnapshot : 0m, blankIfZero: true);
                     SetPoundPiaster(cells[4], cells[5], hasWorker ? mac!.TotalWorkerWages : 0m, blankIfZero: true);
                     SetCellText(cells[6], "", JustificationValues.Center);
@@ -215,7 +216,7 @@ public class WordExportService
                     bool hasMachine = mac != null && (mHours > 0m || mac.TotalMachineOperatingCost > 0m);
 
                     SetCellText(cells[0], mac != null ? SanitizeXml(mac.MachineryNameSnapshot) : "", JustificationValues.Right, bold: true);
-                    SetCellText(cells[1], mHours > 0m ? mHours.ToString("G") : "", JustificationValues.Center);
+                    SetCellText(cells[1], mHours > 0m ? ArabicDigits.FormatCompactDecimal(mHours) : "", JustificationValues.Center);
                     SetPoundPiaster(cells[2], cells[3], hasMachine ? mac!.MachineHourlyRateSnapshot : 0m, blankIfZero: true);
                     SetPoundPiaster(cells[4], cells[5], hasMachine ? mac!.TotalMachineOperatingCost : 0m, blankIfZero: true);
                     SetCellText(cells[6], "", JustificationValues.Center);
@@ -325,7 +326,7 @@ public class WordExportService
                 {
                     ReplaceParagraphTextPreservingStyle(
                         numPara,
-                        $"رقم التسوية : {SanitizeXml(t.SettlementNumber)}          بتاريخ : {t.SettlementDate:yyyy/MM/dd} م",
+                        $"رقم التسوية : {ArabicDigits.ToArabicPreservingTechnical(SanitizeXml(t.SettlementNumber))}          بتاريخ : {ArabicDigits.FormatDate(t.SettlementDate, "yyyy/MM/dd")} م",
                         JustificationValues.Center);
                 }
             }
@@ -415,10 +416,10 @@ public class WordExportService
                 new ParagraphProperties(new BiDi()),
                 new Run(
                     new RunProperties(new Bold(), new FontSize() { Val = "24" }, new RightToLeftText()),
-                    new Text(SanitizeXml($"رقم أمر الدفع: {p.PaymentOrderNumber} | التاريخ: {p.PaymentDate:yyyy/MM/dd}\n")) { Space = SpaceProcessingModeValues.Preserve }),
+                    new Text(ArabicDigits.ToArabicPreservingTechnical(SanitizeXml($"رقم أمر الدفع: {p.PaymentOrderNumber} | التاريخ: {p.PaymentDate:yyyy/MM/dd}\n"))) { Space = SpaceProcessingModeValues.Preserve }),
                 new Run(
                     new RunProperties(new FontSize() { Val = "22" }, new RightToLeftText()),
-                    new Text(SanitizeXml($"الحساب: {p.Account?.AccountNameAr} | حالة السداد: {(p.IsConfirmed ? "مؤكد ومسدد رسمياً" : "مسودة غير مسددة")}")) { Space = SpaceProcessingModeValues.Preserve }));
+                    new Text(ArabicDigits.ToArabicPreservingTechnical(SanitizeXml($"الحساب: {p.Account?.AccountNameAr} | حالة السداد: {(p.IsConfirmed ? "مؤكد ومسدد رسمياً" : "مسودة غير مسددة")}"))) { Space = SpaceProcessingModeValues.Preserve }));
             body.Append(pMeta);
 
             var table = new Table();
@@ -439,9 +440,9 @@ public class WordExportService
             {
                 table.AppendChild(CreateTwoColRow(
                     $"تسوية رقم {link.Tasweya?.SettlementNumber} (مطالبة {link.Tasweya?.ClaimNumber} - {link.Tasweya?.Customer?.CustomerNameAr})",
-                    $"{link.SnapshotTasweyaAmount:F2}"));
+                    ArabicDigits.FormatDecimal(link.SnapshotTasweyaAmount)));
             }
-            table.AppendChild(CreateTwoColRow("إجمالي المبلغ المسدد بأمر الدفع", $"{p.TotalPaidAmount:F2}", isBold: true));
+            table.AppendChild(CreateTwoColRow("إجمالي المبلغ المسدد بأمر الدفع", ArabicDigits.FormatDecimal(p.TotalPaidAmount), isBold: true));
             body.Append(table);
 
             var pTafqeet = new Paragraph(
@@ -589,9 +590,9 @@ public class WordExportService
         long p = totalPiasters / 100L;
         long pi = totalPiasters % 100L;
 
-        string piText = (pi == 0 && p > 0) ? "-" : pi.ToString("D2");
+        string piText = (pi == 0 && p > 0) ? "-" : ArabicDigits.FormatPiasters((int)pi);
         SetCellText(piCell, piText, JustificationValues.Center, bold);
-        SetCellText(poCell, p.ToString("N0"), JustificationValues.Center, bold);
+        SetCellText(poCell, ArabicDigits.FormatInteger(p), JustificationValues.Center, bold);
     }
 
     private static void ClearRange(List<TableCell> cells, int startIdx, int endIdx)
@@ -646,7 +647,7 @@ public class WordExportService
         foreach (var child in para.Elements().Where(e => e is not ParagraphProperties).ToList())
             child.Remove();
 
-        para.Append(new Run(templateRPr, new Text(SanitizeXml(text)) { Space = SpaceProcessingModeValues.Preserve }));
+        para.Append(new Run(templateRPr, new Text(ArabicDigits.ToArabicPreservingTechnical(SanitizeXml(text))) { Space = SpaceProcessingModeValues.Preserve }));
     }
 
     private static void ReplaceTokenAcrossCellParagraphs(TableCell cell, string token, string replacement)
@@ -669,7 +670,7 @@ public class WordExportService
         string qtyText = SanitizeXml(m.RequiredQuantityText);
         string specs = SanitizeXml(m.SpecificationsText);
 
-        string line1 = $"الجهة الطالبة : {custName}          الكمية المطلوبة : {qtyText}          سعر الوحدة : {unitPrice:N2} ج.م";
+        string line1 = $"الجهة الطالبة : {custName}          الكمية المطلوبة : {qtyText}          سعر الوحدة : {ArabicDigits.FormatDecimal(unitPrice)} ج.م";
         string line2 = $"المواصفــــات : {specs}";
 
         var p0 = paras.FirstOrDefault() ?? cell.AppendChild(new Paragraph());
@@ -730,5 +731,5 @@ public class WordExportService
                         isHeader || isBold ? new Bold() : new RunProperties(),
                         new FontSize() { Val = isHeader ? "24" : "20" },
                         new RightToLeftText()),
-                    new Text(SanitizeXml(text)) { Space = SpaceProcessingModeValues.Preserve })));
+                    new Text(ArabicDigits.ToArabicPreservingTechnical(SanitizeXml(text))) { Space = SpaceProcessingModeValues.Preserve })));
 }

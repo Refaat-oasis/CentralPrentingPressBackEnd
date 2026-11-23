@@ -38,7 +38,7 @@ public static class TasweyaTokens
         var model = new Dictionary<string, object?>
         {
             ["SettlementNo"] = d.SettlementNo,
-            ["Date"] = d.Date.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture),
+            ["Date"] = CentralPress.API.Helpers.ArabicDigits.FormatDate(d.Date, "dd/MM/yyyy"),
             ["JobOrderNo"] = m.JobOrderNo,
             ["Requester"] = m.Requester,
             ["ClaimNo"] = d.ClaimNo,

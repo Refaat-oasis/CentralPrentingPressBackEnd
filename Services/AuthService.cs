@@ -224,7 +224,8 @@ public class AuthService : IAuthService
             return (false, "تم تجاوز الحد الأقصى للمحاولات الخاطئة. يرجى طلب رمز جديد.");
         }
 
-        var expectedHash = ComputeOtpHash(user.Email!, dto.Code);
+        var normalizedCode = CentralPress.API.Helpers.ArabicDigits.NormalizeToAscii(dto.Code);
+        var expectedHash = ComputeOtpHash(user.Email!, normalizedCode);
         bool matches = CryptographicOperations.FixedTimeEquals(
             Encoding.UTF8.GetBytes(user.PasswordResetCodeHash),
             Encoding.UTF8.GetBytes(expectedHash));
@@ -263,7 +264,8 @@ public class AuthService : IAuthService
             return (false, "تم تجاوز الحد الأقصى للمحاولات الخاطئة. يرجى طلب رمز جديد.");
         }
 
-        var expectedHash = ComputeOtpHash(user.Email!, dto.Code);
+        var normalizedCode = CentralPress.API.Helpers.ArabicDigits.NormalizeToAscii(dto.Code);
+        var expectedHash = ComputeOtpHash(user.Email!, normalizedCode);
         bool matches = CryptographicOperations.FixedTimeEquals(
             Encoding.UTF8.GetBytes(user.PasswordResetCodeHash),
             Encoding.UTF8.GetBytes(expectedHash));

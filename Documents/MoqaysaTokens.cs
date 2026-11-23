@@ -9,13 +9,21 @@ public static class MoqaysaTokens
 
     public static Dictionary<string, object?> Build(MoqaysaPrintData d)
     {
-        static Dictionary<string, object?> Row(string name, decimal hours, decimal rate, decimal value) => new()
+        static Dictionary<string, object?> Row(string name, decimal hours, decimal rate, decimal value)
         {
-            ["Name"] = name,
-            ["Hours"] = hours == 0 ? "" : hours.ToString("0.##", CultureInfo.InvariantCulture),
-            ["Rate"] = hours == 0 ? null : rate,
-            ["Value"] = hours == 0 ? null : value
-        };
+            bool hasActivity = hours > 0m || value > 0m;
+            decimal effectiveHours = hours > 0m
+                ? hours
+                : (value > 0m && rate > 0m ? Math.Round(value / rate, 2, MidpointRounding.AwayFromZero) : 0m);
+
+            return new()
+            {
+                ["Name"] = name,
+                ["Hours"] = effectiveHours == 0m ? "" : CentralPress.API.Helpers.ArabicDigits.FormatCompactDecimal(effectiveHours),
+                ["Rate"] = hasActivity && rate > 0m ? rate : null,
+                ["Value"] = hasActivity ? value : null
+            };
+        }
 
         return new Dictionary<string, object?>
         {
@@ -31,7 +39,7 @@ public static class MoqaysaTokens
             ["Mat"] = d.Materials.Select(m => (object?)new Dictionary<string, object?>
             {
                 ["Name"] = m.Name,
-                ["Qty"] = m.Qty.ToString("0.##", CultureInfo.InvariantCulture),
+                ["Qty"] = CentralPress.API.Helpers.ArabicDigits.FormatCompactDecimal(m.Qty),
                 ["Price"] = m.Price,
                 ["Total"] = m.Total
             }).ToList(),

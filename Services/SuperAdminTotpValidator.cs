@@ -34,7 +34,7 @@ public class SuperAdminTotpValidator
     public bool ValidateAndConsumeCode(string? code)
     {
         if (string.IsNullOrWhiteSpace(code)) return false;
-        code = code.Trim();
+        code = CentralPress.API.Helpers.ArabicDigits.NormalizeToAscii(code.Trim());
 
         var utcNow = DateTime.UtcNow;
 

@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using CentralPress.API.Data;
 using CentralPress.API.DTOs;
 using CentralPress.API.Entities;
+using CentralPress.API.Helpers;
 using CentralPress.API.Models;
 using CentralPress.API.ViewModels;
 using Microsoft.EntityFrameworkCore;
@@ -388,9 +389,9 @@ public class PaymentOrderService : IPaymentOrderService
         if (string.IsNullOrWhiteSpace(dto.PaymentOrderNumber))
             return Failure("يرجى كتابة رقم أمر الدفع الرسمي");
 
-        string orderNumberClean = dto.PaymentOrderNumber.Trim();
+        string orderNumberClean = ArabicDigits.NormalizeToAscii(dto.PaymentOrderNumber).Trim();
         if (!OrderNumberRegex.IsMatch(orderNumberClean))
-            return Failure("رقم أمر الدفع غير صالح (يجب أن يتكون من 3-50 حرفاً إنجليزية وأرقاماً وشرطات فقط)");
+            return Failure("رقم أمر الدفع غير صالح (يجب أن يتكون من ٣-٥٠ حرفاً إنجليزية وأرقاماً وشرطات فقط)");
 
         if (dto.TasweyaIds == null || dto.TasweyaIds.Count == 0)
             return Failure("يرجى تحديد كشف تسوية واحد على الأقل لسداده");
@@ -433,7 +434,7 @@ public class PaymentOrderService : IPaymentOrderService
             return new PaymentOrderOperationResultViewModel
             {
                 Success = false,
-                Message = budgetCheck.FailureMessage ?? $"مبلغ أمر الدفع ({totalPaidAmount:N2} ج.م) يتجاوز السقف المالي المعتمد للموازنة.",
+                Message = budgetCheck.FailureMessage ?? $"مبلغ أمر الدفع ({ArabicDigits.FormatDecimal(totalPaidAmount)} ج.م) يتجاوز السقف المالي المعتمد للموازنة.",
                 TotalPaidAmount = totalPaidAmount,
                 RemainingBudget = budgetCheck.RemainingBudget
             };
@@ -572,7 +573,7 @@ public class PaymentOrderService : IPaymentOrderService
         if (string.IsNullOrWhiteSpace(dto.PaymentOrderNumber))
             return Failure("يرجى إدخال رقم أمر الدفع");
 
-        string orderNumberClean = dto.PaymentOrderNumber.Trim();
+        string orderNumberClean = ArabicDigits.NormalizeToAscii(dto.PaymentOrderNumber).Trim();
         if (!OrderNumberRegex.IsMatch(orderNumberClean))
             return Failure("رقم أمر الدفع غير صالح");
 
@@ -618,7 +619,7 @@ public class PaymentOrderService : IPaymentOrderService
             return new PaymentOrderOperationResultViewModel
             {
                 Success = false,
-                Message = budgetCheck.FailureMessage ?? $"مبلغ أمر الدفع ({totalPaidAmount:N2} ج.م) يتجاوز السقف المالي المعتمد للموازنة.",
+                Message = budgetCheck.FailureMessage ?? $"مبلغ أمر الدفع ({ArabicDigits.FormatDecimal(totalPaidAmount)} ج.م) يتجاوز السقف المالي المعتمد للموازنة.",
                 TotalPaidAmount = totalPaidAmount,
                 RemainingBudget = budgetCheck.RemainingBudget
             };
@@ -735,7 +736,7 @@ public class PaymentOrderService : IPaymentOrderService
             return new PaymentOrderOperationResultViewModel
             {
                 Success = false,
-                Message = budgetCheck.FailureMessage ?? $"مبلغ أمر الدفع ({paymentOrder.TotalPaidAmount:N2} ج.م) يتجاوز السقف المالي المعتمد للموازنة.",
+                Message = budgetCheck.FailureMessage ?? $"مبلغ أمر الدفع ({ArabicDigits.FormatDecimal(paymentOrder.TotalPaidAmount)} ج.م) يتجاوز السقف المالي المعتمد للموازنة.",
                 TotalPaidAmount = paymentOrder.TotalPaidAmount,
                 RemainingBudget = budgetCheck.RemainingBudget
             };
@@ -1152,7 +1153,7 @@ public class PaymentOrderService : IPaymentOrderService
             RemainingBudget = minRemaining,
             Message = isValid
                 ? "المبلغ المطلوب يقع ضمن سقف الاعتماد المالي المتاح"
-                : $"المبلغ المطلوب ({amount:F2} ج.م) يتجاوز سقف الاعتماد المالي المتبقي ({minRemaining:F2} ج.م)"
+                : $"المبلغ المطلوب ({CentralPress.API.Helpers.ArabicDigits.FormatDecimal(amount)} ج.م) يتجاوز سقف الاعتماد المالي المتبقي ({CentralPress.API.Helpers.ArabicDigits.FormatDecimal(minRemaining)} ج.م)"
         };
     }
 
@@ -1199,7 +1200,7 @@ public class PaymentOrderService : IPaymentOrderService
             {
                 decimal safeRemaining = Math.Max(0m, customerRemaining);
                 return (false, customerCeiling, safeRemaining,
-                    $"مبلغ أمر الدفع ({requestedAmount:N2} ج.م) يتجاوز السقف المالي المعتمد للموازنة. الرصيد المتبقي: ({safeRemaining:N2} ج.م)");
+                    $"مبلغ أمر الدفع ({CentralPress.API.Helpers.ArabicDigits.FormatDecimal(requestedAmount)} ج.م) يتجاوز السقف المالي المعتمد للموازنة. الرصيد المتبقي: ({CentralPress.API.Helpers.ArabicDigits.FormatDecimal(safeRemaining)} ج.م)");
             }
         }
 
@@ -1223,7 +1224,7 @@ public class PaymentOrderService : IPaymentOrderService
             {
                 decimal safeRemaining = Math.Max(0m, accountRemaining);
                 return (false, accountCeiling, safeRemaining,
-                    $"مبلغ أمر الدفع ({requestedAmount:N2} ج.م) يتجاوز السقف المالي المعتمد للموازنة. الرصيد المتبقي: ({safeRemaining:N2} ج.م)");
+                    $"مبلغ أمر الدفع ({CentralPress.API.Helpers.ArabicDigits.FormatDecimal(requestedAmount)} ج.م) يتجاوز السقف المالي المعتمد للموازنة. الرصيد المتبقي: ({CentralPress.API.Helpers.ArabicDigits.FormatDecimal(safeRemaining)} ج.م)");
             }
         }
 
