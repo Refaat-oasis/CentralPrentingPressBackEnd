@@ -40,5 +40,12 @@ public class AuditBacklog
     [MaxLength(100)]
     public string? IpAddress { get; set; }
 
+    public int StatusCode { get; set; } = 200;
+
+    public bool IsSuccess { get; set; } = true;
+
+    [MaxLength(1000)]
+    public string? ErrorMessage { get; set; }
+
     public DateTime TimestampUtc { get; set; } = DateTime.UtcNow;
 }

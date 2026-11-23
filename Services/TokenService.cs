@@ -43,22 +43,19 @@ public class TokenService : ITokenService
         _keyBytes = Encoding.UTF8.GetBytes(secret);
     }
 
-    public async Task<AuthTokenViewModel> GenerateTokensAsync(ApplicationUser user, bool isSuperAdmin, string? ipAddress)
+    public async Task<AuthTokenViewModel> GenerateTokensAsync(ApplicationUser user, string? ipAddress)
     {
-        var roles = isSuperAdmin ? new List<string> { "SuperAdmin" } : (await _userManager.GetRolesAsync(user)).ToList();
-        if (!roles.Any() && !isSuperAdmin)
+        var roles = (await _userManager.GetRolesAsync(user)).ToList();
+        if (!roles.Any())
         {
             roles.Add("Employee");
         }
 
         var sessionId = Guid.NewGuid().ToString();
-        if (!isSuperAdmin)
-        {
-            user.CurrentSessionId = sessionId;
-            user.LastActivityUtc = DateTime.UtcNow;
-            user.SessionStartedUtc = DateTime.UtcNow;
-            await _userManager.UpdateAsync(user);
-        }
+        user.CurrentSessionId = sessionId;
+        user.LastActivityUtc = DateTime.UtcNow;
+        user.SessionStartedUtc = DateTime.UtcNow;
+        await _userManager.UpdateAsync(user);
 
         var claims = new List<Claim>
         {
@@ -67,7 +64,7 @@ public class TokenService : ITokenService
             new("EmployeeCode", user.EmployeeCode ?? string.Empty),
             new("FullName", user.FullName ?? string.Empty),
             new("JobTitle", user.JobTitle?.TitleNameAr ?? string.Empty),
-            new("SessionId", isSuperAdmin ? "SUPERADMIN_SESSION" : sessionId)
+            new("SessionId", sessionId)
         };
 
         foreach (var role in roles)
@@ -90,14 +87,10 @@ public class TokenService : ITokenService
             }
         }
 
-        // Collect direct user claims only for database-persisted users
-        if (!isSuperAdmin)
+        var userClaims = await _userManager.GetClaimsAsync(user);
+        foreach (var uc in userClaims.Where(c => c.Type == "permission"))
         {
-            var userClaims = await _userManager.GetClaimsAsync(user);
-            foreach (var uc in userClaims.Where(c => c.Type == "permission"))
-            {
-                permissionSet.Add(uc.Value);
-            }
+            permissionSet.Add(uc.Value);
         }
 
         foreach (var perm in permissionSet)
@@ -124,24 +117,18 @@ public class TokenService : ITokenService
         var securityToken = handler.CreateToken(tokenDescriptor);
         var accessToken = handler.WriteToken(securityToken);
 
-        // Generate Refresh Token ONLY for standard persisted users
-        // SuperAdmin relies strictly on hourly rotating TOTP codes without persistent DB sessions
-        string refreshTokenString = string.Empty;
-        if (!isSuperAdmin)
+        var refreshTokenString = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
+        var refreshToken = new RefreshToken
         {
-            refreshTokenString = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
-            var refreshToken = new RefreshToken
-            {
-                UserId = user.Id,
-                Token = refreshTokenString,
-                ExpiresAtUtc = DateTime.UtcNow.AddDays(7),
-                CreatedAtUtc = DateTime.UtcNow,
-                CreatedByIp = ipAddress
-            };
+            UserId = user.Id,
+            Token = refreshTokenString,
+            ExpiresAtUtc = DateTime.UtcNow.AddDays(7),
+            CreatedAtUtc = DateTime.UtcNow,
+            CreatedByIp = ipAddress
+        };
 
-            _context.RefreshTokens.Add(refreshToken);
-            await _context.SaveChangesAsync();
-        }
+        _context.RefreshTokens.Add(refreshToken);
+        await _context.SaveChangesAsync();
 
         return new AuthTokenViewModel
         {

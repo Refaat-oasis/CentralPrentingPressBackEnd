@@ -110,7 +110,7 @@ public class AdminUsersController : ControllerBase
     }
 
     [HttpPost("test-smtp")]
-    [Authorize(Roles = "SuperAdmin,Admin")]
+    [Authorize(Roles = "Developer,Admin")]
     [PermissionAuthorize("EMPLOYEES", "CanAccess")]
     public async Task<IActionResult> TestSmtp([FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] TestSmtpRequestDto? dto = null)
     {

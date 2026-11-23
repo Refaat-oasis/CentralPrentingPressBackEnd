@@ -16,5 +16,8 @@ public class AuditBacklogViewModel
     public string? OldValuesJson { get; init; }
     public string? NewValuesJson { get; init; }
     public string? IpAddress { get; init; }
+    public int StatusCode { get; init; } = 200;
+    public bool IsSuccess { get; init; } = true;
+    public string? ErrorMessage { get; init; }
     public DateTime TimestampUtc { get; init; }
 }

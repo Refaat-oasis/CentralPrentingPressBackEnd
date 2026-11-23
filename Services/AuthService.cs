@@ -76,8 +76,9 @@ public class AuthService : IAuthService
             await _userManager.ResetAccessFailedCountAsync(user);
         }
 
-        var tokens = await _tokenService.GenerateTokensAsync(user, isSuperAdmin: false, ipAddress);
+        var tokens = await _tokenService.GenerateTokensAsync(user, ipAddress);
         var permissions = await _permissionService.GetUserPermissionsAsync(user.Id);
+        bool isDeveloper = await _userManager.IsInRoleAsync(user, "Developer");
 
         var jobTitle = user.JobTitle ?? (user.JobTitleId.HasValue ? await _context.JobTitles.FindAsync([user.JobTitleId.Value], cancellationToken) : null);
 
@@ -89,9 +90,9 @@ public class AuthService : IAuthService
             Email = user.Email,
             PhotoUrl = user.PhotoUrl,
             JobTitleId = user.JobTitleId,
-            JobTitleName = jobTitle?.TitleNameAr,
+            JobTitleName = jobTitle?.TitleNameAr ?? (isDeveloper ? "مطور النظام" : null),
             MustChangePassword = user.MustChangePassword,
-            IsSuperAdmin = false
+            IsDeveloper = isDeveloper
         };
 
         return new LoginResponseViewModel
@@ -154,6 +155,7 @@ public class AuthService : IAuthService
             return (false, string.Join(", ", result.Errors.Select(e => e.Description)), null);
         }
 
+        bool isDeveloper = await _userManager.IsInRoleAsync(user, "Developer");
         var profile = new UserProfileViewModel
         {
             Id = user.Id,
@@ -162,9 +164,9 @@ public class AuthService : IAuthService
             Email = user.Email,
             PhotoUrl = user.PhotoUrl,
             JobTitleId = user.JobTitleId,
-            JobTitleName = user.JobTitle?.TitleNameAr,
+            JobTitleName = user.JobTitle?.TitleNameAr ?? (isDeveloper ? "مطور النظام" : null),
             MustChangePassword = user.MustChangePassword,
-            IsSuperAdmin = false
+            IsDeveloper = isDeveloper
         };
 
         return (true, "تم تحديث الملف الشخصي بنجاح", profile);
@@ -300,36 +302,8 @@ public class AuthService : IAuthService
         return (true, "تم إعادة تعيين كلمة المرور بنجاح");
     }
 
-    public async Task<object?> GetCurrentUserAsync(string? userId, string? email, bool isSuperAdmin, CancellationToken cancellationToken = default)
+    public async Task<object?> GetCurrentUserAsync(string? userId, string? email, CancellationToken cancellationToken = default)
     {
-        if (isSuperAdmin)
-        {
-            var modules = await _context.SystemModules.ToListAsync(cancellationToken);
-            var permissions = modules.Select(m => new ModuleEffectivePermissionViewModel(
-                m.ModuleKey,
-                m.ModuleNameAr,
-                true,
-                true,
-                true,
-                true
-            ));
-
-            return new
-            {
-                user = new UserProfileViewModel
-                {
-                    Id = "SUPERADMIN_ROOT",
-                    EmployeeCode = "SUPERADMIN",
-                    FullName = "Super Administrator (المسؤول الفائق)",
-                    Email = "superadmin@aup.edu.eg",
-                    JobTitleName = "Super Admin Authority",
-                    MustChangePassword = false,
-                    IsSuperAdmin = true
-                },
-                permissions
-            };
-        }
-
         if (string.IsNullOrEmpty(userId) && string.IsNullOrEmpty(email)) return null;
 
         var user = await _context.Users
@@ -339,6 +313,7 @@ public class AuthService : IAuthService
         if (user == null) return null;
 
         var userPermissions = await _permissionService.GetUserPermissionsAsync(user.Id);
+        bool isDeveloper = await _userManager.IsInRoleAsync(user, "Developer");
 
         return new
         {
@@ -350,9 +325,9 @@ public class AuthService : IAuthService
                 Email = user.Email,
                 PhotoUrl = user.PhotoUrl,
                 JobTitleId = user.JobTitleId,
-                JobTitleName = user.JobTitle?.TitleNameAr,
+                JobTitleName = user.JobTitle?.TitleNameAr ?? (isDeveloper ? "مطور النظام" : null),
                 MustChangePassword = user.MustChangePassword,
-                IsSuperAdmin = false
+                IsDeveloper = isDeveloper
             },
             permissions = userPermissions
         };

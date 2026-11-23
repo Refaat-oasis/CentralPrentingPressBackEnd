@@ -29,8 +29,8 @@ public class PermissionService
 
         if (user == null || !user.IsActive) return false;
 
-        // SuperAdmin or Admin role has full access to all modules
-        if (await _userManager.IsInRoleAsync(user, "SuperAdmin") || await _userManager.IsInRoleAsync(user, "Admin"))
+        // Developer or Admin role has full access to all modules
+        if (await _userManager.IsInRoleAsync(user, "Developer") || await _userManager.IsInRoleAsync(user, "Admin"))
         {
             return true;
         }
@@ -87,8 +87,8 @@ public class PermissionService
         var modules = await _context.SystemModules.Where(m => m.IsActive).ToListAsync();
         if (user == null) return new List<ModuleEffectivePermissionViewModel>();
 
-        // SuperAdmin or Admin has full access to all modules
-        if (await _userManager.IsInRoleAsync(user, "SuperAdmin") || await _userManager.IsInRoleAsync(user, "Admin"))
+        // Developer or Admin has full access to all modules
+        if (await _userManager.IsInRoleAsync(user, "Developer") || await _userManager.IsInRoleAsync(user, "Admin"))
         {
             return modules.Select(mod => new ModuleEffectivePermissionViewModel(
                 mod.ModuleKey,

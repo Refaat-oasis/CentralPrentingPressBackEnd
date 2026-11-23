@@ -234,7 +234,7 @@ public static class DbInitializer
         }
 
         // 6. Seed Native Identity Roles & Claims (HIGH-06)
-        string[] standardRoles = { "SuperAdmin", "Admin", "Accountant", "Manager", "Employee" };
+        string[] standardRoles = { "Developer", "Admin", "Accountant", "Manager", "Employee" };
         foreach (var rName in standardRoles)
         {
             if (!await roleManager.RoleExistsAsync(rName))
@@ -243,21 +243,24 @@ public static class DbInitializer
             }
         }
 
-        var adminIdentityRole = await roleManager.FindByNameAsync("Admin");
-        if (adminIdentityRole != null)
-        {
-            var existingClaims = await roleManager.GetClaimsAsync(adminIdentityRole);
-            string[] modules = { "employees", "job_titles", "machinery", "materials", "customers", "moqaysa", "formulas", "tasweya", "payment_orders", "reports" };
-            string[] actions = { "access", "create", "update", "toggleactive" };
+        string[] moduleKeys = { "employees", "job_titles", "machinery", "materials", "customers", "moqaysa", "formulas", "tasweya", "payment_orders", "reports" };
+        string[] moduleActions = { "access", "create", "update", "toggleactive" };
 
-            foreach (var m in modules)
+        foreach (var privilegedRoleName in new[] { "Developer", "Admin" })
+        {
+            var privilegedRole = await roleManager.FindByNameAsync(privilegedRoleName);
+            if (privilegedRole != null)
             {
-                foreach (var a in actions)
+                var existingClaims = await roleManager.GetClaimsAsync(privilegedRole);
+                foreach (var m in moduleKeys)
                 {
-                    var claimVal = $"{m}:{a}";
-                    if (!existingClaims.Any(c => c.Type == "permission" && c.Value == claimVal))
+                    foreach (var a in moduleActions)
                     {
-                        await roleManager.AddClaimAsync(adminIdentityRole, new Claim("permission", claimVal));
+                        var claimVal = $"{m}:{a}";
+                        if (!existingClaims.Any(c => c.Type == "permission" && c.Value == claimVal))
+                        {
+                            await roleManager.AddClaimAsync(privilegedRole, new Claim("permission", claimVal));
+                        }
                     }
                 }
             }
@@ -333,6 +336,94 @@ public static class DbInitializer
             if (!await userManager.IsInRoleAsync(existingAdmin, "Admin"))
             {
                 await userManager.AddToRoleAsync(existingAdmin, "Admin");
+            }
+        }
+
+        // 7b. Seed & Sync Developer User from appsettings.json ("Developer:Email", "Developer:Password")
+        var rawDevEmail = configuration?["Developer:Email"]?.Trim();
+        var rawDevPassword = configuration?["Developer:Password"]?.Trim();
+        var rawDevFullName = configuration?["Developer:FullName"]?.Trim();
+        if (!string.IsNullOrWhiteSpace(rawDevEmail) &&
+            !string.IsNullOrWhiteSpace(rawDevPassword) &&
+            !rawDevEmail.Contains("REPLACE_", StringComparison.OrdinalIgnoreCase) &&
+            !rawDevEmail.Contains("CHANGE_ME", StringComparison.OrdinalIgnoreCase) &&
+            !rawDevPassword.Contains("REPLACE_", StringComparison.OrdinalIgnoreCase) &&
+            !rawDevPassword.Contains("CHANGE_ME", StringComparison.OrdinalIgnoreCase))
+        {
+            var devFullName = string.IsNullOrWhiteSpace(rawDevFullName) ? "مطور النظام" : rawDevFullName;
+            var existingDev = await context.Users.IgnoreQueryFilters()
+                .FirstOrDefaultAsync(u => u.EmployeeCode == "DEV001" || u.NormalizedEmail == rawDevEmail.ToUpperInvariant());
+
+            if (existingDev == null)
+            {
+                var devUser = new ApplicationUser
+                {
+                    UserName = rawDevEmail,
+                    Email = rawDevEmail,
+                    EmailConfirmed = true,
+                    FullName = devFullName,
+                    EmployeeCode = "DEV001",
+                    JobTitleId = null,
+                    MustChangePassword = false,
+                    IsActive = true,
+                    CreatedAtUtc = DateTime.UtcNow
+                };
+
+                var devCreateResult = await userManager.CreateAsync(devUser, rawDevPassword);
+                if (!devCreateResult.Succeeded)
+                {
+                    logger?.LogWarning("Failed to seed Developer user: {Errors}", string.Join(", ", devCreateResult.Errors.Select(e => e.Description)));
+                }
+                else
+                {
+                    await userManager.AddToRoleAsync(devUser, "Developer");
+                }
+            }
+            else
+            {
+                bool needsUpdate = false;
+                if (!string.Equals(existingDev.Email, rawDevEmail, StringComparison.OrdinalIgnoreCase))
+                {
+                    existingDev.Email = rawDevEmail;
+                    existingDev.UserName = rawDevEmail;
+                    existingDev.EmailConfirmed = true;
+                    needsUpdate = true;
+                }
+                if (!string.Equals(existingDev.FullName, devFullName, StringComparison.Ordinal))
+                {
+                    existingDev.FullName = devFullName;
+                    needsUpdate = true;
+                }
+                if (!existingDev.IsActive)
+                {
+                    existingDev.IsActive = true;
+                    needsUpdate = true;
+                }
+                if (existingDev.MustChangePassword)
+                {
+                    existingDev.MustChangePassword = false;
+                    needsUpdate = true;
+                }
+
+                if (needsUpdate)
+                {
+                    await userManager.UpdateAsync(existingDev);
+                }
+
+                if (!await userManager.IsInRoleAsync(existingDev, "Developer"))
+                {
+                    await userManager.AddToRoleAsync(existingDev, "Developer");
+                }
+
+                if (!await userManager.CheckPasswordAsync(existingDev, rawDevPassword))
+                {
+                    var resetToken = await userManager.GeneratePasswordResetTokenAsync(existingDev);
+                    var resetRes = await userManager.ResetPasswordAsync(existingDev, resetToken, rawDevPassword);
+                    if (!resetRes.Succeeded)
+                    {
+                        logger?.LogWarning("Failed to sync Developer password: {Errors}", string.Join(", ", resetRes.Errors.Select(e => e.Description)));
+                    }
+                }
             }
         }
 

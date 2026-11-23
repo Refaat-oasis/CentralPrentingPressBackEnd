@@ -8,7 +8,9 @@ using System.Threading.Tasks;
 using CentralPress.API.Data;
 using CentralPress.API.Entities;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
+using Microsoft.AspNetCore.Mvc.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace CentralPress.API.Filters;
@@ -33,43 +35,53 @@ public class AuditBacklogActionFilter : IAsyncActionFilter
             {
                 var dbContext = httpContext.RequestServices.GetRequiredService<ApplicationDbContext>();
                 var userId = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
-                var isSuperAdmin = httpContext.User.IsInRole("SuperAdmin");
+                var isDeveloper = httpContext.User.IsInRole("Developer");
 
                 string? employeeName = httpContext.User.FindFirstValue("FullName");
                 string? jobTitleName = httpContext.User.FindFirstValue("JobTitle");
 
-                if (isSuperAdmin)
+                if (isDeveloper)
                 {
-                    employeeName ??= "Super Admin (مسؤول فائق)";
-                    jobTitleName ??= "Super Administrator";
+                    employeeName ??= "مطور النظام (Developer)";
+                    jobTitleName ??= "مطور النظام";
                 }
 
                 var path = httpContext.Request.Path.Value ?? "";
-                string actionType = method;
-                if (path.Contains("toggle-active") || path.Contains("toggle-status")) actionType = "ToggleActive";
-                else if (path.Contains("confirm")) actionType = "ConfirmPaymentOrder";
-                else if (path.Contains("export-word")) actionType = "ExportWord";
-                else if (path.Contains("export-pdf")) actionType = "ExportPdf";
-                else if (path.Contains("login")) actionType = "Login";
+                var lowerPath = path.ToLowerInvariant();
 
-                string moduleName = "System";
-                if (path.Contains("/moqaysa")) moduleName = "MOQAYSA";
-                else if (path.Contains("/tasweya")) moduleName = "TASWEYA";
-                else if (path.Contains("/payment-orders") || path.Contains("/paymentorders")) moduleName = "PAYMENT_ORDERS";
-                else if (path.Contains("/admin-users") || path.Contains("/adminusers")) moduleName = "EMPLOYEES";
-                else if (path.Contains("/job-titles") || path.Contains("/jobtitles")) moduleName = "JOB_TITLES";
-                else if (path.Contains("/machineries")) moduleName = "MACHINERY";
-                else if (path.Contains("/materials")) moduleName = "MATERIALS";
-                else if (path.Contains("/customers")) moduleName = "CUSTOMERS";
-                else if (path.Contains("/reports")) moduleName = "REPORTS";
-                else if (path.Contains("/auth")) moduleName = "AUTH";
-                else if (path.Contains("/superadmin")) moduleName = "SUPERADMIN";
+                string actionType = method switch
+                {
+                    "POST" => "Create",
+                    "PUT" or "PATCH" => "Update",
+                    "DELETE" => "Delete",
+                    _ => method
+                };
+                if (lowerPath.Contains("toggle-active") || lowerPath.Contains("toggle-status")) actionType = "ToggleActive";
+                else if (lowerPath.Contains("confirm")) actionType = "ConfirmPaymentOrder";
+                else if (lowerPath.Contains("export-word") || lowerPath.Contains("/docx")) actionType = "ExportWord";
+                else if (lowerPath.Contains("export-pdf") || lowerPath.Contains("/pdf")) actionType = "ExportPdf";
+                else if (lowerPath.Contains("test-smtp")) actionType = "TestSmtp";
+                else if (lowerPath.Contains("requeue")) actionType = "RequeueJob";
+                else if (lowerPath.Contains("/login")) actionType = "Login";
+                else if (lowerPath.Contains("/logout")) actionType = "Logout";
+
+                string moduleName = "SYSTEM";
+                if (lowerPath.Contains("/moqaysa")) moduleName = "MOQAYSA";
+                else if (lowerPath.Contains("/tasweya")) moduleName = "TASWEYA";
+                else if (lowerPath.Contains("/payment-orders") || lowerPath.Contains("/paymentorders")) moduleName = "PAYMENT_ORDERS";
+                else if (lowerPath.Contains("/admin-users") || lowerPath.Contains("/adminusers")) moduleName = "EMPLOYEES";
+                else if (lowerPath.Contains("/job-titles") || lowerPath.Contains("/jobtitles")) moduleName = "JOB_TITLES";
+                else if (lowerPath.Contains("/machineries")) moduleName = "MACHINERY";
+                else if (lowerPath.Contains("/materials")) moduleName = "MATERIALS";
+                else if (lowerPath.Contains("/customers")) moduleName = "CUSTOMERS";
+                else if (lowerPath.Contains("/reports")) moduleName = "REPORTS";
+                else if (lowerPath.Contains("/auth")) moduleName = "AUTH";
+                else if (lowerPath.Contains("/superadmin") || lowerPath.Contains("/developer") || lowerPath.Contains("/hangfire")) moduleName = "DEVELOPER";
 
                 string? payload = null;
 
                 // Path-level security redaction: Auth endpoints are completely redacted
-                if (path.Contains("/api/auth", StringComparison.OrdinalIgnoreCase) ||
-                    path.Contains("/api/superadmin/login", StringComparison.OrdinalIgnoreCase))
+                if (path.Contains("/api/auth", StringComparison.OrdinalIgnoreCase))
                 {
                     payload = "{\"redacted\": true, \"reason\": \"Authentication payload redacted for security\"}";
                 }
@@ -90,6 +102,46 @@ public class AuditBacklogActionFilter : IAsyncActionFilter
                     }
                 }
 
+                int statusCode = httpContext.Response.StatusCode;
+                string? errorMessage = null;
+
+                if (executedContext.Exception != null && !executedContext.ExceptionHandled)
+                {
+                    statusCode = StatusCodes.Status500InternalServerError;
+                    errorMessage = executedContext.Exception.Message;
+                }
+                else if (executedContext.Result is IStatusCodeActionResult statusResult && statusResult.StatusCode.HasValue)
+                {
+                    statusCode = statusResult.StatusCode.Value;
+                }
+
+                bool isSuccess = executedContext.Exception == null && statusCode < 400;
+                if (!isSuccess && string.IsNullOrWhiteSpace(errorMessage) && executedContext.Result is ObjectResult objRes && objRes.Value != null)
+                {
+                    try
+                    {
+                        var node = JsonSerializer.SerializeToNode(objRes.Value);
+                        if (node is JsonObject obj && obj.TryGetPropertyValue("message", out var msgNode) && msgNode != null)
+                        {
+                            errorMessage = msgNode.ToString();
+                        }
+                        else if (node != null)
+                        {
+                            SanitizeNode(node);
+                            errorMessage = node.ToJsonString();
+                        }
+                    }
+                    catch
+                    {
+                        errorMessage = $"HTTP {statusCode}";
+                    }
+                }
+
+                if (!string.IsNullOrEmpty(errorMessage) && errorMessage.Length > 1000)
+                {
+                    errorMessage = errorMessage[..1000];
+                }
+
                 var backlog = new AuditBacklog
                 {
                     UserId = userId ?? "Anonymous",
@@ -100,6 +152,9 @@ public class AuditBacklogActionFilter : IAsyncActionFilter
                     RequestPath = path,
                     NewValuesJson = payload,
                     IpAddress = httpContext.Connection.RemoteIpAddress?.ToString(),
+                    StatusCode = statusCode,
+                    IsSuccess = isSuccess,
+                    ErrorMessage = errorMessage,
                     TimestampUtc = DateTime.UtcNow
                 };
 

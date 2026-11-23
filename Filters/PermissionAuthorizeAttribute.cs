@@ -30,8 +30,8 @@ public class PermissionAuthorizeAttribute : Attribute, IAsyncAuthorizationFilter
             return;
         }
 
-        // SuperAdmin or Admin role bypasses granular permission checks
-        if (user.IsInRole("SuperAdmin") || user.IsInRole("Admin"))
+        // Developer or Admin role bypasses granular permission checks
+        if (user.IsInRole("Developer") || user.IsInRole("Admin"))
         {
             return;
         }

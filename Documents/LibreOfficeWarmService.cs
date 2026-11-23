@@ -1,5 +1,4 @@
 using System;
-using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -10,19 +9,22 @@ using Microsoft.Extensions.Options;
 namespace CentralPress.API.Documents;
 
 /// <summary>
-/// Keeps a warm, headless LibreOffice background worker alive so that subsequent
-/// PDF conversion requests execute against an already-initialized runtime in memory.
+/// Performs a single one-shot startup initialization of the dedicated LibreOffice user profile
+/// so PDF exports do not stall on first-run profile setup or suffer recurring 3-second restart loops.
 /// </summary>
 public sealed class LibreOfficeWarmService : BackgroundService
 {
     private readonly IOptions<DocumentOptions> _options;
+    private readonly PdfConverter _pdfConverter;
     private readonly ILogger<LibreOfficeWarmService> _logger;
-    private readonly object _lock = new();
-    private Process? _daemonProcess;
 
-    public LibreOfficeWarmService(IOptions<DocumentOptions> options, ILogger<LibreOfficeWarmService> logger)
+    public LibreOfficeWarmService(
+        IOptions<DocumentOptions> options,
+        PdfConverter pdfConverter,
+        ILogger<LibreOfficeWarmService> logger)
     {
         _options = options;
+        _pdfConverter = pdfConverter;
         _logger = logger;
     }
 
@@ -31,121 +33,22 @@ public sealed class LibreOfficeWarmService : BackgroundService
         var opt = _options.Value;
         if (!File.Exists(opt.SofficePath))
         {
-            _logger.LogInformation("LibreOffice warm daemon skipped: soffice binary not found at '{Path}'.", opt.SofficePath);
+            _logger.LogInformation("LibreOffice startup profile check skipped: soffice binary not found at '{Path}'.", opt.SofficePath);
             return;
         }
 
-        while (!stoppingToken.IsCancellationRequested)
+        try
         {
-            Process? currentProc = null;
-            try
-            {
-                currentProc = StartWarmInstance(opt);
-
-                if (currentProc != null)
-                {
-                    await currentProc.WaitForExitAsync(stoppingToken);
-                    if (!stoppingToken.IsCancellationRequested)
-                    {
-                        int exitCode = 0;
-                        try { exitCode = currentProc.ExitCode; } catch { }
-                        _logger.LogWarning("LibreOffice warm daemon process exited with code {Code}. Restarting in 3s...", exitCode);
-                    }
-                }
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                break;
-            }
-            catch (Exception ex)
-            {
-                if (!stoppingToken.IsCancellationRequested)
-                {
-                    _logger.LogWarning(ex, "Failed to start or maintain LibreOffice warm daemon. Retrying in 5s...");
-                }
-            }
-
-            try
-            {
-                await Task.Delay(TimeSpan.FromSeconds(3), stoppingToken);
-            }
-            catch (OperationCanceledException)
-            {
-                break;
-            }
+            await _pdfConverter.WarmUpProfileOnceAsync(stoppingToken);
+            _logger.LogInformation("LibreOffice profile verified at '{ProfileFolder}'. No persistent background soffice process required.", opt.ProfileFolder);
         }
-
-        StopWarmInstance();
-    }
-
-    private Process? StartWarmInstance(DocumentOptions opt)
-    {
-        lock (_lock)
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
-            StopWarmInstance();
-
-            var profileUri = "file:///" + opt.ProfileFolder.Trim().Replace('\\', '/');
-            try
-            {
-                if (!Directory.Exists(opt.ProfileFolder))
-                {
-                    Directory.CreateDirectory(opt.ProfileFolder);
-                }
-            }
-            catch { }
-
-            var psi = new ProcessStartInfo(opt.SofficePath)
-            {
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = false,
-                RedirectStandardError = false,
-            };
-
-            psi.ArgumentList.Add("--headless");
-            psi.ArgumentList.Add("--invisible");
-            psi.ArgumentList.Add("--nologo");
-            psi.ArgumentList.Add("--nodefault");
-            psi.ArgumentList.Add("--nofirststartwizard");
-            psi.ArgumentList.Add("--norestore");
-            psi.ArgumentList.Add($"-env:UserInstallation={profileUri}");
-
-            _daemonProcess = Process.Start(psi);
-            if (_daemonProcess != null)
-            {
-                _logger.LogInformation("LibreOffice warm daemon started successfully (PID: {Pid}) with profile {Profile}.", _daemonProcess.Id, profileUri);
-            }
-            return _daemonProcess;
+            // Normal shutdown
         }
-    }
-
-    private void StopWarmInstance()
-    {
-        lock (_lock)
+        catch (Exception ex)
         {
-            if (_daemonProcess != null)
-            {
-                try
-                {
-                    if (!_daemonProcess.HasExited)
-                    {
-                        _daemonProcess.Kill(true);
-                    }
-                }
-                catch { }
-                try
-                {
-                    _daemonProcess.Dispose();
-                }
-                catch { }
-                _daemonProcess = null;
-            }
+            _logger.LogWarning(ex, "Non-fatal LibreOffice startup profile initialization warning.");
         }
-    }
-
-    public override Task StopAsync(CancellationToken cancellationToken)
-    {
-        StopWarmInstance();
-        return base.StopAsync(cancellationToken);
     }
 }

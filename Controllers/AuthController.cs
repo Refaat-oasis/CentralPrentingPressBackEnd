@@ -197,11 +197,10 @@ public class AuthController : ControllerBase
     [HttpGet("me")]
     public async Task<IActionResult> GetCurrentUser(CancellationToken cancellationToken)
     {
-        var isSuperAdmin = User.IsInRole("SuperAdmin");
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         var email = User.FindFirstValue(ClaimTypes.Email);
 
-        var result = await _authService.GetCurrentUserAsync(userId, email, isSuperAdmin, cancellationToken);
+        var result = await _authService.GetCurrentUserAsync(userId, email, cancellationToken);
         if (result == null) return NotFound();
 
         return Ok(result);
@@ -212,7 +211,7 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> Logout(CancellationToken cancellationToken)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!string.IsNullOrEmpty(userId) && !User.IsInRole("SuperAdmin"))
+        if (!string.IsNullOrEmpty(userId))
         {
             await _authService.LogoutAsync(userId, cancellationToken);
         }
