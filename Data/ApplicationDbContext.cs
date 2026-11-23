@@ -240,6 +240,8 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             entity.HasIndex(a => a.UserId).HasDatabaseName("IX_AuditBacklogs_UserId");
             entity.HasIndex(a => a.ModuleName).HasDatabaseName("IX_AuditBacklogs_ModuleName");
             entity.HasIndex(a => new { a.ModuleName, a.TimestampUtc }).HasDatabaseName("IX_AuditBacklogs_Module_Timestamp");
+            entity.HasIndex(a => new { a.IsSuccess, a.TimestampUtc }).HasDatabaseName("IX_AuditBacklogs_IsSuccess_Timestamp");
+            entity.HasIndex(a => new { a.ActionType, a.TimestampUtc }).HasDatabaseName("IX_AuditBacklogs_ActionType_Timestamp");
         });
 
         builder.Entity<Moqaysa>()

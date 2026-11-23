@@ -27,13 +27,6 @@ public class UserSessionValidationMiddleware
             return;
         }
 
-        // 2. Skip SuperAdmin (has its own hourly TOTP auth)
-        if (context.User.IsInRole("SuperAdmin"))
-        {
-            await _next(context);
-            return;
-        }
-
         var path = context.Request.Path.Value?.ToLowerInvariant() ?? "";
 
         // 3. Allow logout, refresh, change-password, me, and terminate endpoints to proceed

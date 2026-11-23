@@ -43,6 +43,91 @@ public sealed class PdfConverter(IOptions<DocumentOptions> options)
         }
     }
 
+    private string ResolveExecutablePath()
+    {
+        string executablePath = _o.SofficePath;
+        var comCandidate = Path.ChangeExtension(_o.SofficePath, ".com");
+        if (File.Exists(comCandidate))
+        {
+            executablePath = comCandidate;
+        }
+        return executablePath;
+    }
+
+    private void ApplyProfileArgument(ProcessStartInfo psi)
+    {
+        if (!string.IsNullOrWhiteSpace(_o.ProfileFolder))
+        {
+            try
+            {
+                if (!Directory.Exists(_o.ProfileFolder))
+                    Directory.CreateDirectory(_o.ProfileFolder);
+            }
+            catch { }
+
+            var profileUri = "file:///" + _o.ProfileFolder.Trim().Replace('\\', '/');
+            psi.ArgumentList.Add($"-env:UserInstallation={profileUri}");
+        }
+    }
+
+    /// <summary>
+    /// Initializes the dedicated LibreOffice user profile once at startup if it has not been created yet,
+    /// under the conversion Gate so it never spawns recurring background processes or collides with PDF exports.
+    /// </summary>
+    public async Task WarmUpProfileOnceAsync(CancellationToken ct = default)
+    {
+        if (!File.Exists(_o.SofficePath) || string.IsNullOrWhiteSpace(_o.ProfileFolder))
+        {
+            return;
+        }
+
+        var profileMarker = Path.Combine(_o.ProfileFolder, "user", "registrymodifications.xcu");
+        if (File.Exists(profileMarker))
+        {
+            return;
+        }
+
+        await Gate.WaitAsync(ct);
+        try
+        {
+            if (File.Exists(profileMarker))
+            {
+                return;
+            }
+
+            var psi = new ProcessStartInfo(ResolveExecutablePath())
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardError = true,
+                RedirectStandardOutput = true
+            };
+            ApplyProfileArgument(psi);
+            foreach (var a in new[] { "--headless", "--nologo", "--nodefault", "--nofirststartwizard", "--norestore", "--version" })
+            {
+                psi.ArgumentList.Add(a);
+            }
+
+            using var p = Process.Start(psi);
+            if (p == null) return;
+
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(20));
+            try
+            {
+                await p.WaitForExitAsync(cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                try { p.Kill(true); } catch { }
+            }
+        }
+        finally
+        {
+            Gate.Release();
+        }
+    }
+
     private async Task<byte[]> ConvertWithLibreOfficeAsync(byte[] docx, CancellationToken ct)
     {
         var dir = Directory.CreateTempSubdirectory("thoth-doc-");
@@ -52,14 +137,7 @@ public sealed class PdfConverter(IOptions<DocumentOptions> options)
             await File.WriteAllBytesAsync(input, docx, ct);
 
             // On Windows, prefer soffice.com (console launcher) if available for faster CLI synchronization
-            string executablePath = _o.SofficePath;
-            var comCandidate = Path.ChangeExtension(_o.SofficePath, ".com");
-            if (File.Exists(comCandidate))
-            {
-                executablePath = comCandidate;
-            }
-
-            var psi = new ProcessStartInfo(executablePath)
+            var psi = new ProcessStartInfo(ResolveExecutablePath())
             {
                 UseShellExecute = false,
                 CreateNoWindow = true,
@@ -67,20 +145,9 @@ public sealed class PdfConverter(IOptions<DocumentOptions> options)
                 RedirectStandardOutput = true
             };
 
-            if (!string.IsNullOrWhiteSpace(_o.ProfileFolder))
-            {
-                try
-                {
-                    if (!Directory.Exists(_o.ProfileFolder))
-                        Directory.CreateDirectory(_o.ProfileFolder);
-                }
-                catch { }
+            ApplyProfileArgument(psi);
 
-                var profileUri = "file:///" + _o.ProfileFolder.Trim().Replace('\\', '/');
-                psi.ArgumentList.Add($"-env:UserInstallation={profileUri}");
-            }
-
-            foreach (var a in new[] { "--headless", "--norestore", "--convert-to", "pdf", "--outdir", dir.FullName, input })
+            foreach (var a in new[] { "--headless", "--nologo", "--nodefault", "--nofirststartwizard", "--norestore", "--convert-to", "pdf", "--outdir", dir.FullName, input })
             {
                 psi.ArgumentList.Add(a);
             }

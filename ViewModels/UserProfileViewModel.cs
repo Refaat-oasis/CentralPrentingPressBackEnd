@@ -10,5 +10,5 @@ public class UserProfileViewModel
     public int? JobTitleId { get; init; }
     public string? JobTitleName { get; init; }
     public bool MustChangePassword { get; init; }
-    public bool IsSuperAdmin { get; init; }
+    public bool IsDeveloper { get; init; }
 }

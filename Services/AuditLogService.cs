@@ -55,6 +55,8 @@ public class AuditLogService : IAuditLogService
             OldValuesJson = oldValues != null ? JsonSerializer.Serialize(oldValues) : null,
             NewValuesJson = newValues != null ? JsonSerializer.Serialize(newValues) : null,
             IpAddress = httpContext?.Connection?.RemoteIpAddress?.ToString(),
+            StatusCode = 200,
+            IsSuccess = true,
             TimestampUtc = DateTime.UtcNow
         };
 

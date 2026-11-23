@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Mail;
 using System.Text;
 using System.Threading.Tasks;
+using Hangfire;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
@@ -12,11 +13,16 @@ public class EmailService : IEmailService
 {
     private readonly ILogger<EmailService> _logger;
     private readonly IConfiguration _config;
+    private readonly IBackgroundJobClient? _backgroundJobClient;
 
-    public EmailService(ILogger<EmailService> logger, IConfiguration config)
+    public EmailService(
+        ILogger<EmailService> logger,
+        IConfiguration config,
+        IBackgroundJobClient? backgroundJobClient = null)
     {
         _logger = logger;
         _config = config;
+        _backgroundJobClient = backgroundJobClient;
     }
 
     public async Task<(bool Success, string? ErrorMessage)> SendPasswordResetCodeAsync(string email, string employeeName, string resetCode)
@@ -71,7 +77,7 @@ public class EmailService : IEmailService
                 </div>
             </div>";
 
-        return await TrySendSmtpEmailAsync(email, employeeName, subject, bodyHtml);
+        return await SendWithHangfireFallbackAsync(email, employeeName, subject, bodyHtml);
     }
 
     public async Task<(bool Success, string? ErrorMessage)> SendNewUserInvitationCodeAsync(string email, string employeeName, string employeeCode, string initialCode)
@@ -162,15 +168,14 @@ public class EmailService : IEmailService
                 </div>
             </div>";
 
-        return await TrySendSmtpEmailAsync(email, employeeName, subject, bodyHtml);
+        return await SendWithHangfireFallbackAsync(email, employeeName, subject, bodyHtml);
     }
 
     public async Task<(bool Success, string Message, string? Details)> TestSmtpConnectionAsync(string testRecipientEmail)
     {
-        var host = _config["SmtpSettings:Host"] ?? "";
-        var senderEmail = _config["SmtpSettings:SenderEmail"] ?? "";
+        var (_, host, _, _, _, senderEmail, _) = ResolveEmailSettings();
         var safeHost = WebUtility.HtmlEncode(host);
-        var safeSenderEmail = WebUtility.HtmlEncode(senderEmail);
+        var safeSenderEmail = WebUtility.HtmlEncode(senderEmail ?? "");
         var safeRecipient = WebUtility.HtmlEncode(testRecipientEmail);
 
         var subject = "مطبعة جامعة أسيوط - اختبار إرسال البريد الإلكتروني (SMTP Test)";
@@ -243,7 +248,7 @@ public class EmailService : IEmailService
                 </div>
             </div>";
 
-        var (success, error) = await TrySendSmtpEmailAsync(testRecipientEmail, "مسؤول النظام", subject, bodyHtml);
+        var (success, error) = await SendDirectSmtpAsync(testRecipientEmail, "مسؤول النظام", subject, bodyHtml);
         if (success)
         {
             return (true, $"تم إرسال بريد الاختبار بنجاح إلى ({testRecipientEmail}) عبر خادم ({host})", null);
@@ -254,35 +259,108 @@ public class EmailService : IEmailService
         }
     }
 
-    private async Task<(bool Success, string? ErrorMessage)> TrySendSmtpEmailAsync(string recipientEmail, string recipientName, string subject, string htmlContent)
+    private async Task<(bool Success, string? ErrorMessage)> SendWithHangfireFallbackAsync(
+        string recipientEmail,
+        string recipientName,
+        string subject,
+        string htmlContent)
+    {
+        var (success, error) = await SendDirectSmtpAsync(recipientEmail, recipientName, subject, htmlContent);
+        if (!success && _backgroundJobClient != null)
+        {
+            try
+            {
+                var jobId = _backgroundJobClient.Enqueue<IEmailRetryJob>(
+                    job => job.SendEmailWithRetryAsync(recipientEmail, recipientName, subject, htmlContent));
+                _logger.LogWarning(
+                    "[HANGFIRE QUEUED] Email to {Email} failed immediately ({Error}); queued background retry job #{JobId}.",
+                    recipientEmail,
+                    error,
+                    jobId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[HANGFIRE ENQUEUE FAILED] Could not schedule email retry job for {Email}.", recipientEmail);
+            }
+        }
+        return (success, error);
+    }
+
+    private (bool IsConfigured, string Host, int Port, bool EnableSsl, string? UserName, string? SenderEmail, string SenderName) ResolveEmailSettings()
+    {
+        var rawEmail = _config["EmailSettings:Email"]
+            ?? _config["EmailSettings:SenderEmail"]
+            ?? _config["SmtpSettings:SenderEmail"];
+        var rawUserName = _config["EmailSettings:UserName"]
+            ?? _config["SmtpSettings:UserName"];
+        var rawPassword = _config["EmailSettings:AppPassword"]
+            ?? _config["EmailSettings:Password"]
+            ?? _config["SmtpSettings:AppPassword"]
+            ?? _config["SmtpSettings:Password"];
+
+        var host = !string.IsNullOrWhiteSpace(_config["EmailSettings:Host"])
+            ? _config["EmailSettings:Host"]!.Trim()
+            : (!string.IsNullOrWhiteSpace(_config["SmtpSettings:Host"])
+                ? _config["SmtpSettings:Host"]!.Trim()
+                : "smtp.gmail.com");
+
+        var portStr = _config["EmailSettings:Port"] ?? _config["SmtpSettings:Port"];
+        int port = 587;
+        if (!string.IsNullOrWhiteSpace(portStr) && int.TryParse(portStr, out var parsedPort) && parsedPort > 0)
+        {
+            port = parsedPort;
+        }
+
+        var sslStr = _config["EmailSettings:EnableSsl"] ?? _config["SmtpSettings:EnableSsl"];
+        bool enableSsl = string.IsNullOrWhiteSpace(sslStr) || (bool.TryParse(sslStr, out var ssl) && ssl);
+
+        var senderEmail = (!string.IsNullOrWhiteSpace(rawEmail) ? rawEmail : rawUserName)?.Trim();
+        var userName = (!string.IsNullOrWhiteSpace(rawUserName) ? rawUserName : rawEmail)?.Trim();
+        var senderName = _config["EmailSettings:SenderName"]
+            ?? _config["SmtpSettings:SenderName"]
+            ?? "مطبعة جامعة أسيوط المركزية";
+
+        var password = rawPassword?.Replace(" ", "").Trim();
+        bool isConfigured = !string.IsNullOrWhiteSpace(host)
+            && !string.IsNullOrWhiteSpace(senderEmail)
+            && !string.IsNullOrWhiteSpace(userName)
+            && !string.IsNullOrWhiteSpace(password)
+            && !IsPlaceholder(senderEmail)
+            && !IsPlaceholder(password);
+
+        return (isConfigured, host, port, enableSsl, userName, senderEmail, senderName);
+    }
+
+    private static bool IsPlaceholder(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return true;
+        return value.Contains("YOUR_GMAIL", StringComparison.OrdinalIgnoreCase)
+            || value.Contains("YOUR_16_CHAR", StringComparison.OrdinalIgnoreCase)
+            || value.Contains("REPLACE_WITH", StringComparison.OrdinalIgnoreCase)
+            || value.Contains("CHANGE_ME", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public async Task<(bool Success, string? ErrorMessage)> SendDirectSmtpAsync(string recipientEmail, string recipientName, string subject, string htmlContent)
     {
         try
         {
-            var host = _config["SmtpSettings:Host"];
-            var portStr = _config["SmtpSettings:Port"];
-            var enableSsl = bool.TryParse(_config["SmtpSettings:EnableSsl"], out var ssl) && ssl;
-            var rawUserName = _config["SmtpSettings:UserName"];
-            var rawPassword = _config["SmtpSettings:Password"];
-            var senderEmail = _config["SmtpSettings:SenderEmail"];
-            var senderName = _config["SmtpSettings:SenderName"] ?? "مطبعة جامعة أسيوط المركزية";
-
-            var userName = (!string.IsNullOrWhiteSpace(rawUserName))
-                ? rawUserName.Trim()
-                : senderEmail?.Trim();
-
+            var (isConfigured, host, port, enableSsl, userName, senderEmail, senderName) = ResolveEmailSettings();
+            var rawPassword = _config["EmailSettings:AppPassword"]
+                ?? _config["EmailSettings:Password"]
+                ?? _config["SmtpSettings:AppPassword"]
+                ?? _config["SmtpSettings:Password"];
             var password = rawPassword?.Replace(" ", "").Trim();
 
-            if (string.IsNullOrWhiteSpace(host) || string.IsNullOrWhiteSpace(senderEmail) || string.IsNullOrWhiteSpace(userName) || string.IsNullOrWhiteSpace(password))
+            if (!isConfigured || string.IsNullOrWhiteSpace(senderEmail) || string.IsNullOrWhiteSpace(userName) || string.IsNullOrWhiteSpace(password))
             {
-                _logger.LogWarning("[SMTP SKIPPED] Incomplete SmtpSettings configuration.");
-                return (false, "إعدادات خادم البريد الإلكتروني (SMTP) غير مكتملة.");
+                _logger.LogWarning("[SMTP SKIPPED] Incomplete EmailSettings/SmtpSettings configuration.");
+                return (false, "إعدادات بريد Gmail (Email / AppPassword) غير مكتملة في appsettings.json.");
             }
-
-            int port = 587;
-            if (!string.IsNullOrWhiteSpace(portStr)) int.TryParse(portStr, out port);
 
             using var client = new SmtpClient(host, port)
             {
+                DeliveryMethod = SmtpDeliveryMethod.Network,
+                UseDefaultCredentials = false,
                 EnableSsl = enableSsl,
                 Credentials = new NetworkCredential(userName, password),
                 Timeout = 15000
@@ -300,13 +378,13 @@ public class EmailService : IEmailService
             message.To.Add(new MailAddress(recipientEmail, recipientName, Encoding.UTF8));
 
             await client.SendMailAsync(message);
-            _logger.LogInformation("[SMTP SUCCESS] Email successfully dispatched to {Email}", recipientEmail);
+            _logger.LogInformation("[SMTP SUCCESS] Email successfully dispatched to {Email} via {Host}:{Port}", recipientEmail, host, port);
             return (true, null);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "[SMTP FAILURE] Could not dispatch email via SMTP ({Message})", ex.Message);
-            return (false, "تعذر الاتصال بخادم البريد الإلكتروني (SMTP). يرجى مراجعة سجلات الخادم.");
+            return (false, $"تعذر إرسال البريد عبر SMTP: {ex.Message}");
         }
     }
 }

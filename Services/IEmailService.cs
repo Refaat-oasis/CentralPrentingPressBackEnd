@@ -7,4 +7,5 @@ public interface IEmailService
     Task<(bool Success, string? ErrorMessage)> SendPasswordResetCodeAsync(string email, string employeeName, string resetCode);
     Task<(bool Success, string? ErrorMessage)> SendNewUserInvitationCodeAsync(string email, string employeeName, string employeeCode, string initialCode);
     Task<(bool Success, string Message, string? Details)> TestSmtpConnectionAsync(string testRecipientEmail);
+    Task<(bool Success, string? ErrorMessage)> SendDirectSmtpAsync(string recipientEmail, string recipientName, string subject, string htmlContent);
 }

@@ -9,6 +9,9 @@ using CentralPress.API.Data;
 using CentralPress.API.Entities;
 using CentralPress.API.Filters;
 using CentralPress.API.Services;
+using Hangfire;
+using Hangfire.MemoryStorage;
+using Hangfire.SqlServer;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Diagnostics;
@@ -89,14 +92,6 @@ if (string.IsNullOrWhiteSpace(jwtKey) || jwtKey.Length < 32 ||
     throw new InvalidOperationException("JwtSettings:SecurityKey is not configured securely (minimum 32 non-placeholder characters required).");
 }
 
-var superAdminSecret = builder.Configuration["SuperAdmin:MasterSecret"];
-if (isProdLike && (string.IsNullOrWhiteSpace(superAdminSecret) ||
-    superAdminSecret.Contains("REPLACE_WITH", StringComparison.OrdinalIgnoreCase) ||
-    superAdminSecret.Contains("DEV_ONLY", StringComparison.OrdinalIgnoreCase)))
-{
-    throw new InvalidOperationException("SuperAdmin:MasterSecret must be securely configured in Production.");
-}
-
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -134,7 +129,7 @@ builder.Services.AddAuthorization(options =>
 
             options.AddPolicy(legacyPolicyName, policy =>
                 policy.RequireAssertion(ctx =>
-                    ctx.User.IsInRole("SuperAdmin") ||
+                    ctx.User.IsInRole("Developer") ||
                     ctx.User.IsInRole("Admin") ||
                     ctx.User.HasClaim(c => c.Type == PermissionConstants.ClaimType &&
                         (c.Value.Equals(normalizedClaim, StringComparison.OrdinalIgnoreCase) ||
@@ -142,7 +137,7 @@ builder.Services.AddAuthorization(options =>
 
             options.AddPolicy(normalizedClaim, policy =>
                 policy.RequireAssertion(ctx =>
-                    ctx.User.IsInRole("SuperAdmin") ||
+                    ctx.User.IsInRole("Developer") ||
                     ctx.User.IsInRole("Admin") ||
                     ctx.User.HasClaim(c => c.Type == PermissionConstants.ClaimType &&
                         (c.Value.Equals(normalizedClaim, StringComparison.OrdinalIgnoreCase) ||
@@ -151,9 +146,9 @@ builder.Services.AddAuthorization(options =>
     }
 });
 
-// 5. Register MemoryCache & Application Services
+// 5. Register MemoryCache, Hangfire & Application Services
 builder.Services.AddMemoryCache();
-builder.Services.AddSingleton<SuperAdminTotpValidator>();
+builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<ISuperAdminService, SuperAdminService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -170,11 +165,44 @@ builder.Services.AddScoped<IFormulaConfigService, FormulaConfigService>();
 builder.Services.AddScoped<WordExportService>();
 builder.Services.AddScoped<PdfExportService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
+builder.Services.AddScoped<IEmailRetryJob, EmailRetryJob>();
 builder.Services.AddSingleton<ITafqeetService, TafqeetService>();
 builder.Services.AddScoped<IAuditLogService, AuditLogService>();
 builder.Services.AddScoped<ITasweyaService, TasweyaService>();
 builder.Services.AddScoped<IPaymentOrderService, PaymentOrderService>();
 builder.Services.AddScoped<IReportsService, ReportsService>();
+
+// Hangfire Background Jobs (Email Auto-Retry + Developer Monitoring)
+if (builder.Configuration["UseInMemoryDatabase"] == "true")
+{
+    builder.Services.AddHangfire(config => config
+        .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+        .UseSimpleAssemblyNameTypeSerializer()
+        .UseRecommendedSerializerSettings()
+        .UseMemoryStorage());
+}
+else
+{
+    var hangfireConn = builder.Configuration.GetConnectionString("DefaultConnection");
+    builder.Services.AddHangfire(config => config
+        .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+        .UseSimpleAssemblyNameTypeSerializer()
+        .UseRecommendedSerializerSettings()
+        .UseSqlServerStorage(hangfireConn, new SqlServerStorageOptions
+        {
+            PrepareSchemaIfNecessary = true,
+            CommandBatchMaxTimeout = TimeSpan.FromMinutes(5),
+            SlidingInvisibilityTimeout = TimeSpan.FromMinutes(5),
+            QueuePollInterval = TimeSpan.FromSeconds(15),
+            UseRecommendedIsolationLevel = true,
+            DisableGlobalLocks = true
+        }));
+}
+builder.Services.AddHangfireServer(options =>
+{
+    options.Queues = new[] { "emails", "default" };
+    options.WorkerCount = 2;
+});
 
 // Documents Printing Engine (PLAN.md - Single Source of Truth)
 builder.Services.Configure<CentralPress.API.Documents.DocumentOptions>(builder.Configuration.GetSection(CentralPress.API.Documents.DocumentOptions.Section));
@@ -381,6 +409,11 @@ app.UseRateLimiter();
 app.UseAuthentication();
 app.UseMiddleware<CentralPress.API.Middleware.UserSessionValidationMiddleware>();
 app.UseAuthorization();
+
+app.UseHangfireDashboard("/hangfire", new DashboardOptions
+{
+    Authorization = new[] { new DeveloperHangfireAuthorizationFilter() }
+});
 
 app.MapHealthChecks("/health");
 app.MapHealthChecks("/api/health");

@@ -39,8 +39,21 @@ public class AdminUserService : IAdminUserService
 
     public async Task<List<EmployeeSummaryViewModel>> GetAllEmployeesAsync(CancellationToken cancellationToken = default)
     {
+        var developerRoleId = await _context.Roles
+            .Where(r => r.NormalizedName == "DEVELOPER")
+            .Select(r => r.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var developerUserIds = developerRoleId != null
+            ? await _context.UserRoles
+                .Where(ur => ur.RoleId == developerRoleId)
+                .Select(ur => ur.UserId)
+                .ToListAsync(cancellationToken)
+            : new List<string>();
+
         return await _context.Users
             .Include(u => u.JobTitle)
+            .Where(u => u.EmployeeCode != "DEV001" && !developerUserIds.Contains(u.Id))
             .OrderBy(u => u.EmployeeCode)
             .Select(u => new EmployeeSummaryViewModel
             {
@@ -193,10 +206,10 @@ public class AdminUserService : IAdminUserService
         var user = await _context.Users.IgnoreQueryFilters().FirstOrDefaultAsync(u => u.Id == id, cancellationToken);
         if (user == null) return (false, "الموظف غير موجود", false);
 
-        // MED-05: Protect SuperAdmin accounts from deactivation
-        if (await _userManager.IsInRoleAsync(user, "SuperAdmin"))
+        // MED-05: Protect Developer accounts from deactivation
+        if (await _userManager.IsInRoleAsync(user, "Developer"))
         {
-            return (false, "لا يمكن تعطيل حساب المسؤول الفائق", user.IsActive);
+            return (false, "لا يمكن تعطيل حساب مطور النظام", user.IsActive);
         }
 
         user.IsActive = !user.IsActive;
@@ -295,9 +308,9 @@ public class AdminUserService : IAdminUserService
         if (user == null) return (false, "الموظف غير موجود");
 
         // HIGH-05: Dynamic role check instead of hardcoded email/EMP001 check
-        if (await _userManager.IsInRoleAsync(user, "SuperAdmin"))
+        if (await _userManager.IsInRoleAsync(user, "Developer"))
         {
-            return (false, "لا يمكن حذف حساب المسؤول الفائق للنظام");
+            return (false, "لا يمكن حذف حساب مطور النظام");
         }
 
         // HIGH-22: Transactional cleanup with provider safety check
