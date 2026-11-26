@@ -17,8 +17,6 @@ namespace CentralPress.API.Services;
 
 public class PaymentOrderService : IPaymentOrderService
 {
-    private static readonly Regex OrderNumberRegex = new(@"^[A-Za-z0-9_\-\.]{3,50}$", RegexOptions.Compiled);
-
     private readonly ApplicationDbContext _context;
     private readonly WordExportService _wordExportService;
     private readonly PdfExportService _pdfExportService;
@@ -390,8 +388,8 @@ public class PaymentOrderService : IPaymentOrderService
             return Failure("يرجى كتابة رقم أمر الدفع الرسمي");
 
         string orderNumberClean = ArabicDigits.NormalizeToAscii(dto.PaymentOrderNumber).Trim();
-        if (!OrderNumberRegex.IsMatch(orderNumberClean))
-            return Failure("رقم أمر الدفع غير صالح (يجب أن يتكون من ٣-٥٠ حرفاً إنجليزية وأرقاماً وشرطات فقط)");
+        if (string.IsNullOrWhiteSpace(orderNumberClean))
+            return Failure("يرجى كتابة رقم أمر الدفع الرسمي");
 
         if (dto.TasweyaIds == null || dto.TasweyaIds.Count == 0)
             return Failure("يرجى تحديد كشف تسوية واحد على الأقل لسداده");
@@ -574,8 +572,8 @@ public class PaymentOrderService : IPaymentOrderService
             return Failure("يرجى إدخال رقم أمر الدفع");
 
         string orderNumberClean = ArabicDigits.NormalizeToAscii(dto.PaymentOrderNumber).Trim();
-        if (!OrderNumberRegex.IsMatch(orderNumberClean))
-            return Failure("رقم أمر الدفع غير صالح");
+        if (string.IsNullOrWhiteSpace(orderNumberClean))
+            return Failure("يرجى إدخال رقم أمر الدفع");
 
         if (dto.TasweyaIds == null || dto.TasweyaIds.Count == 0)
             return Failure("يرجى تحديد كشف تسوية واحد على الأقل");

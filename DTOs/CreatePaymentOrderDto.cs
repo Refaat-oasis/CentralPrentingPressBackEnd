@@ -8,7 +8,6 @@ public class CreatePaymentOrderDto
 {
     [Required(ErrorMessage = "يرجى إدخال رقم أمر الدفع الرسمي")]
     [MaxLength(100)]
-    [RegularExpression(@"^[A-Za-z0-9_\-\.]{3,50}$", ErrorMessage = "رقم أمر الدفع غير صالح")]
     public string PaymentOrderNumber { get; set; } = string.Empty;
 
     public DateOnly PaymentDate { get; set; } = DateOnly.FromDateTime(DateTime.UtcNow);

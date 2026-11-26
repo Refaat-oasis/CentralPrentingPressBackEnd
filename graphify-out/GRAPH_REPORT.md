@@ -1,17 +1,17 @@
 # Graph Report - CentralPrentingPressBackEnd  (2026-11-26)
 
 ## Corpus Check
-- 231 files · ~83,588 words
+- 231 files · ~83,555 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 3 file(s) not represented in the graph (top: (none) 1, .docx# 1, .config 1)
 
 ## Summary
-- 2327 nodes · 5434 edges · 129 communities (100 shown, 29 thin omitted)
+- 2327 nodes · 5433 edges · 129 communities (100 shown, 29 thin omitted)
 - Extraction: 94% EXTRACTED · 6% INFERRED · 0% AMBIGUOUS · INFERRED: 336 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `e6c34d5e`
+- Built from commit: `06de1465`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
