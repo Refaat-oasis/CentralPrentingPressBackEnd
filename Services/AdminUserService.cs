@@ -118,9 +118,8 @@ public class AdminUserService : IAdminUserService
             CreatedAtUtc = DateTime.UtcNow
         };
 
-        string passwordToSet = !string.IsNullOrWhiteSpace(dto.DummyPassword)
-            ? dto.DummyPassword.Trim()
-            : GenerateSecureTemporaryPassword();
+        // Always generate a unique, cryptographically secure temporary password for new employees
+        string passwordToSet = GenerateSecureTemporaryPassword();
 
         var result = await _userManager.CreateAsync(user, passwordToSet);
         if (!result.Succeeded)
@@ -355,6 +354,58 @@ public class AdminUserService : IAdminUserService
             _logger.LogError(ex, "Error deleting employee {UserId}", id);
             return (false, "حدث خطأ غير متوقع أثناء حذف الموظف.");
         }
+    }
+
+    public async Task<(bool Succeeded, string Message, bool EmailSent)> ResendInvitationAsync(string userId, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(userId))
+            return (false, "معرف الموظف غير صالح", false);
+
+        var user = await _userManager.FindByIdAsync(userId);
+        if (user == null)
+            return (false, "الموظف غير موجود", false);
+
+        if (!user.IsActive)
+            return (false, "لا يمكن إعادة إرسال بيانات الدخول لموظف تم تعطيل حسابه", false);
+
+        var isDeveloper = await _userManager.IsInRoleAsync(user, "Developer");
+        if (isDeveloper)
+            return (false, "لا يمكن إعادة تعيين أو إرسال بيانات دخول حساب المطور من إدارة الموظفين", false);
+
+        var newTemporaryPassword = GenerateSecureTemporaryPassword();
+
+        var resetToken = await _userManager.GeneratePasswordResetTokenAsync(user);
+        var resetResult = await _userManager.ResetPasswordAsync(user, resetToken, newTemporaryPassword);
+        if (!resetResult.Succeeded)
+        {
+            _logger.LogError("Failed to reset password during resend invitation for {Email}: {Errors}", user.Email, string.Join(", ", resetResult.Errors.Select(e => e.Description)));
+            return (false, "فشل إعادة تعيين كلمة المرور المؤقتة للموظف", false);
+        }
+
+        user.MustChangePassword = true;
+        await _userManager.UpdateAsync(user);
+
+        bool emailSent = false;
+        string? emailError = null;
+        try
+        {
+            var (sent, err) = await _emailService.SendNewUserInvitationCodeAsync(user.Email!, user.FullName, user.EmployeeCode, newTemporaryPassword);
+            emailSent = sent;
+            emailError = err;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected exception sending invitation email for {Email}", user.Email);
+            emailError = ex.Message;
+        }
+
+        if (!emailSent)
+        {
+            _logger.LogWarning("Resend invitation email dispatch failed for {Email}: {Error}", user.Email, emailError);
+            return (true, "تم توليد كلمة مرور مؤقتة جديدة ولكن تعذر إرسال البريد الإلكتروني. يرجى التحقق من اتصال خادم SMTP.", false);
+        }
+
+        return (true, "تم توليد كلمة مرور مؤقتة جديدة وإرسالها إلى بريد الموظف بنجاح.", true);
     }
 
     private static string GenerateSecureTemporaryPassword()
