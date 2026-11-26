@@ -127,4 +127,15 @@ public class AdminUsersController : ControllerBase
 
         return Ok(new { message });
     }
+
+    [HttpPost("{id}/resend-invitation")]
+    [PermissionAuthorize("EMPLOYEES", "CanUpdate")]
+    public async Task<IActionResult> ResendInvitation(string id, CancellationToken cancellationToken)
+    {
+        var (succeeded, message, emailSent) = await _adminUserService.ResendInvitationAsync(id, cancellationToken);
+        if (!succeeded)
+            return BadRequest(new { message });
+
+        return Ok(new { succeeded = true, message, emailSent });
+    }
 }

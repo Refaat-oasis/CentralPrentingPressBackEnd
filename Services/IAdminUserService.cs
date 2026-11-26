@@ -16,4 +16,5 @@ public interface IAdminUserService
     Task<List<UserPermissionOverrideViewModel>> GetUserOverridesAsync(string userId, CancellationToken cancellationToken = default);
     Task<(bool Succeeded, string Message)> SaveUserOverridesAsync(string userId, SaveOverridesDto dto, CancellationToken cancellationToken = default);
     Task<(bool Succeeded, string Message)> DeleteEmployeeAsync(string id, string currentUserId, CancellationToken cancellationToken = default);
+    Task<(bool Succeeded, string Message, bool EmailSent)> ResendInvitationAsync(string userId, CancellationToken cancellationToken = default);
 }
