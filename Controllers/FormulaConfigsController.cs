@@ -24,7 +24,6 @@ public class FormulaConfigsController : ControllerBase
     }
 
     [HttpGet]
-    [PermissionAuthorize("FORMULAS", "CanAccess")]
     public async Task<ActionResult<List<FormulaConfigViewModel>>> GetAll(CancellationToken ct)
     {
         var list = await _formulaConfigService.GetAllAsync(ct);

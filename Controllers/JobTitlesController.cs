@@ -24,7 +24,6 @@ public class JobTitlesController : ControllerBase
     }
 
     [HttpGet]
-    [PermissionAuthorize("JOB_TITLES", "CanAccess")]
     public async Task<IActionResult> GetAll(CancellationToken cancellationToken)
     {
         var titles = await _jobTitleService.GetAllAsync(cancellationToken);

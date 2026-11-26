@@ -23,7 +23,6 @@ public class MachineriesController : ControllerBase
     }
 
     [HttpGet]
-    [PermissionAuthorize("MACHINERY", "CanAccess")]
     public async Task<ActionResult<List<MachineryViewModel>>> GetAll(
         [FromQuery] bool activeOnly = false,
         CancellationToken ct = default)

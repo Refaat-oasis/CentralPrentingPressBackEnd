@@ -23,7 +23,6 @@ public class MaterialsController : ControllerBase
     }
 
     [HttpGet]
-    [PermissionAuthorize("MATERIALS", "CanAccess")]
     public async Task<ActionResult<List<MaterialViewModel>>> GetAll(
         [FromQuery] bool activeOnly = false,
         CancellationToken ct = default)

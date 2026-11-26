@@ -104,7 +104,6 @@ public class CustomersController : ControllerBase
     }
 
     [HttpGet]
-    [PermissionAuthorize("CUSTOMERS", "CanAccess")]
     public async Task<ActionResult<List<CustomerViewModel>>> GetAll(
         [FromQuery] int? accountId,
         [FromQuery] bool activeOnly = false,

@@ -1,17 +1,17 @@
 # Graph Report - CentralPrentingPressBackEnd  (2026-11-26)
 
 ## Corpus Check
-- 231 files · ~83,374 words
+- 231 files · ~83,588 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 3 file(s) not represented in the graph (top: (none) 1, .docx# 1, .config 1)
 
 ## Summary
-- 2327 nodes · 5439 edges · 129 communities (103 shown, 26 thin omitted)
+- 2327 nodes · 5434 edges · 129 communities (100 shown, 29 thin omitted)
 - Extraction: 94% EXTRACTED · 6% INFERRED · 0% AMBIGUOUS · INFERRED: 336 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `f72d07f5`
+- Built from commit: `e6c34d5e`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -23,7 +23,7 @@
 - Moqaysa
 - AuditBacklogViewModel
 - DateTime
-- CancellationToken
+- AdminUserService
 - AccountViewModel
 - MoqaysaCalculationResult
 - List
@@ -32,7 +32,7 @@
 - MoqaysaSummaryViewModel
 - CentralPress.API.Services
 - MoqaysaCalculationResultViewModel
-- CancellationToken
+- MachineriesController
 - PaperCuttingCalculationResultViewModel
 - TasweyaUnsettledMoqaysaViewModel
 - MaterialViewModel
@@ -168,11 +168,11 @@
 ## Import Cycles
 - None detected.
 
-## Communities (129 total, 26 thin omitted)
+## Communities (129 total, 29 thin omitted)
 
 ### Community 0 - "PermissionAuthorize"
-Cohesion: 0.11
-Nodes (6): AdminUsersController, CustomersController, JobTitlesController, MachineriesController, PaymentOrdersController, SuperAdminController
+Cohesion: 0.10
+Nodes (8): AdminUsersController, CustomersController, JobTitlesController, MaterialsController, MoqaysaController, PaymentOrdersController, SuperAdminController, TasweyaController
 
 ### Community 2 - "MoqaysaDetailViewModel"
 Cohesion: 0.04
@@ -193,10 +193,6 @@ Nodes (17): AuditBacklogViewModel, ActionType, AuditId, EmployeeName, EntityName
 ### Community 6 - "DateTime"
 Cohesion: 0.10
 Nodes (10): InitialCreate, M1_DatabaseConstraintsAndRefreshTokens, M2_MachineryMaintenanceAndCostingOverhead, M3_PaymentOrdersBudgetAndTasweyaConstraints, M4_MoqaysatJobOrderNumberNonUnique, AddSessionAndMoqaysaUpdates, M5_TasweyaSettlementNumberNonUnique, M6_MoqaysaAccountShares (+2 more)
-
-### Community 7 - "CancellationToken"
-Cohesion: 0.13
-Nodes (5): JobTitleDto, Description, TitleNameAr, IJobTitleService, JobTitleService
 
 ### Community 8 - "AccountViewModel"
 Cohesion: 0.09
@@ -230,10 +226,6 @@ Nodes (3): CentralPress.API.Filters, CentralPress.API.Controllers, CentralPress.
 Cohesion: 0.06
 Nodes (35): MoqaysaCalculationResultViewModel, AdminExpenses, AdminExpensesPercent, ApplyAdminExpenses, ApplyMarkup, ApplyOther, ApplyVat, FilmsProcessingFee (+27 more)
 
-### Community 16 - "CancellationToken"
-Cohesion: 0.12
-Nodes (3): TasweyaController, IMachineryService, ITasweyaService
-
 ### Community 17 - "PaperCuttingCalculationResultViewModel"
 Cohesion: 0.06
 Nodes (30): PaperCuttingCalculationRequestDto, CutItemHeightMm, CutItemWidthMm, ParentSheetHeightMm, ParentSheetWidthMm, RequiredItemCopies, RunSpoilagePercent, SetupSpoilageSheets (+22 more)
@@ -244,7 +236,7 @@ Nodes (33): TasweyaUnsettledMoqaysaViewModel, AccountId, AccountNameAr, AccountS
 
 ### Community 19 - "MaterialViewModel"
 Cohesion: 0.11
-Nodes (17): MaterialsController, MaterialDto, CategoryAr, IsActive, MaterialId, MaterialNameAr, StandardUnitPrice, UnitNameAr (+9 more)
+Nodes (16): MaterialDto, CategoryAr, IsActive, MaterialId, MaterialNameAr, StandardUnitPrice, UnitNameAr, IMaterialService (+8 more)
 
 ### Community 20 - "PaymentOrderDetailViewModel"
 Cohesion: 0.06
@@ -281,10 +273,6 @@ Nodes (24): MoqaysaAccountShareDto, AccountId, SharePercentage, MoqaysaSaveDto, 
 ### Community 30 - "UnpaidTasweyaViewModel"
 Cohesion: 0.08
 Nodes (25): UnpaidTasweyaViewModel, AccountId, AccountNameAr, AdminExpensesSum, ClaimNumber, CreatedAtUtc, CustomerId, CustomerNameAr (+17 more)
-
-### Community 31 - "AdminUserService"
-Cohesion: 0.20
-Nodes (4): AdminUserService, EmailRetryJob, IEmailRetryJob, IEmailService
 
 ### Community 32 - "ApplicationDbContext"
 Cohesion: 0.09
@@ -359,8 +347,8 @@ Cohesion: 0.14
 Nodes (14): RefreshToken, CreatedAtUtc, CreatedByIp, ExpiresAtUtc, Id, IsActive, IsExpired, IsRevoked (+6 more)
 
 ### Community 55 - "Task"
-Cohesion: 0.09
-Nodes (5): MoqaysaController, SaveOverridesDto, Overrides, IAdminUserService, IMoqaysaService
+Cohesion: 0.06
+Nodes (10): JobTitleDto, Description, TitleNameAr, SaveOverridesDto, Overrides, IAdminUserService, IJobTitleService, IMoqaysaService (+2 more)
 
 ### Community 56 - "PaymentOrderOperationResultViewModel"
 Cohesion: 0.25
@@ -585,17 +573,17 @@ Nodes (5): MaterialItemInputDto, MaterialId, MaterialNameSnapshot, Quantity, Uni
 ## Knowledge Gaps
 - **1178 isolated node(s):** `net9.0`, `Microsoft.AspNetCore.Authentication.JwtBearer (9.0.2)`, `Microsoft.AspNetCore.Identity.EntityFrameworkCore (9.0.2)`, `Microsoft.EntityFrameworkCore.Design (9.0.2)`, `Microsoft.EntityFrameworkCore.SqlServer (9.0.2)` (+1173 more)
   These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 1278 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **26 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **29 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `ApplicationDbContext` connect `ApplicationDbContext` to `MachineryViewModel`, `Moqaysa`, `CancellationToken`, `AccountViewModel`, `List`, `MaterialViewModel`, `CentralPress.API.Data`, `PaymentOrder`, `FormulaConfigViewModel`, `Tasweya`, `AdminUserService`, `RolePermission`, `TokenService`, `ApplicationUser`, `AuthService`, `PaymentOrderService`, `ApplicationDbContext.OnModelCreating`, `TasweyaService`, `MoqaysaService`, `AuditBacklog`, `Customer`, `RefreshToken`, `MoqaysaMachineryItem`, `MoqaysaAccountShare`, `HangfireJobItemViewModel`, `UserPermissionOverride`, `PaymentOrderTasweyaLink`, `ModuleEffectivePermissionViewModel`, `AccountEntity`, `TasweyaMoqaysaLink`, `IReadOnlyList`, `JobTitle`, `AuditBacklogActionFilter.OnActionExecutionAsync`, `IAuditLogService.LogStatusTransitionAsync`?**
+- **Why does `ApplicationDbContext` connect `ApplicationDbContext` to `MachineryViewModel`, `Moqaysa`, `AdminUserService`, `AccountViewModel`, `List`, `MaterialViewModel`, `CentralPress.API.Data`, `PaymentOrder`, `FormulaConfigViewModel`, `Tasweya`, `AdminUserService`, `RolePermission`, `TokenService`, `ApplicationUser`, `AuthService`, `PaymentOrderService`, `ApplicationDbContext.OnModelCreating`, `TasweyaService`, `MoqaysaService`, `AuditBacklog`, `Customer`, `RefreshToken`, `Task`, `MoqaysaMachineryItem`, `MoqaysaAccountShare`, `HangfireJobItemViewModel`, `UserPermissionOverride`, `PaymentOrderTasweyaLink`, `ModuleEffectivePermissionViewModel`, `AccountEntity`, `TasweyaMoqaysaLink`, `IReadOnlyList`, `JobTitle`, `AuditBacklogActionFilter.OnActionExecutionAsync`, `IAuditLogService.LogStatusTransitionAsync`?**
   _High betweenness centrality (0.068) - this node is a cross-community bridge._
 - **What connects `net9.0`, `Microsoft.AspNetCore.Authentication.JwtBearer (9.0.2)`, `Microsoft.AspNetCore.Identity.EntityFrameworkCore (9.0.2)` to the rest of the system?**
   _1178 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `PermissionAuthorize` be split into smaller, more focused modules?**
-  _Cohesion score 0.10707803992740472 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.09821428571428571 - nodes in this community are weakly interconnected._
 - **Why does `Tasweya` connect `Tasweya` to `ApplicationDbContext`, `WordExportService`, `DateTime`, `PaymentOrderService`, `AccountEntity`, `ApplicationDbContext.OnModelCreating`, `TasweyaMoqaysaLink`, `TasweyaAccountShareViewModel`, `PdfExportService`, `TasweyaService`, `Customer`, `Task`, `JobTitle`, `system_componentmodel_dataannotations`, `PaymentOrderTasweyaLink`?**
   _High betweenness centrality (0.058) - this node is a cross-community bridge._
 - **Should `MoqaysaDetailViewModel` be split into smaller, more focused modules?**

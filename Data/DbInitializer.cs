@@ -215,23 +215,66 @@ public static class DbInitializer
             };
             await context.JobTitles.AddRangeAsync(otherTitles);
             await context.SaveChangesAsync();
+        }
 
-            // Grant full permissions for adminRole to all modules
-            var allModules = await context.SystemModules.ToListAsync();
-            foreach (var mod in allModules)
+        // Seed baseline permissions for standard Job Titles that have zero configured permissions
+        var allModules = await context.SystemModules.ToListAsync();
+        var modulesByKey = allModules.ToDictionary(m => m.ModuleKey.ToUpperInvariant(), m => m.ModuleId);
+
+        async Task EnsureBaselinePermissionsAsync(string titleName, Func<string, (bool Access, bool Create, bool Update, bool Toggle)> rule)
+        {
+            var title = await context.JobTitles.FirstOrDefaultAsync(j => j.TitleNameAr == titleName);
+            if (title == null) return;
+            if (await context.RolePermissions.AnyAsync(rp => rp.JobTitleId == title.JobTitleId)) return;
+
+            foreach (var (key, modId) in modulesByKey)
             {
-                context.RolePermissions.Add(new RolePermission
+                var (access, create, update, toggle) = rule(key);
+                if (access || create || update || toggle)
                 {
-                    JobTitleId = adminRole.JobTitleId,
-                    ModuleId = mod.ModuleId,
-                    CanAccess = true,
-                    CanCreate = true,
-                    CanUpdate = true,
-                    CanToggleActive = true
-                });
+                    context.RolePermissions.Add(new RolePermission
+                    {
+                        JobTitleId = title.JobTitleId,
+                        ModuleId = modId,
+                        CanAccess = access,
+                        CanCreate = create,
+                        CanUpdate = update,
+                        CanToggleActive = toggle
+                    });
+                }
             }
             await context.SaveChangesAsync();
         }
+
+        await EnsureBaselinePermissionsAsync("مدير عام إدارة المطبعة", _ => (true, true, true, true));
+
+        await EnsureBaselinePermissionsAsync("رئيس وحدة التكاليف", key => key switch
+        {
+            "MOQAYSA" or "MATERIALS" or "MACHINERY" => (true, true, true, true),
+            "CUSTOMERS" or "FORMULAS" or "TASWEYA" or "REPORTS" => (true, false, false, false),
+            _ => (false, false, false, false)
+        });
+
+        await EnsureBaselinePermissionsAsync("محاسب تسويات ومطالبات", key => key switch
+        {
+            "TASWEYA" => (true, true, true, true),
+            "MOQAYSA" or "CUSTOMERS" or "PAYMENT_ORDERS" or "FORMULAS" or "REPORTS" => (true, false, false, false),
+            _ => (false, false, false, false)
+        });
+
+        await EnsureBaselinePermissionsAsync("مسؤول أوامر الدفع والخزينة", key => key switch
+        {
+            "PAYMENT_ORDERS" => (true, true, true, true),
+            "TASWEYA" or "CUSTOMERS" or "REPORTS" => (true, false, false, false),
+            _ => (false, false, false, false)
+        });
+
+        await EnsureBaselinePermissionsAsync("مراجع مالي ومراقب حسابات", key => key switch
+        {
+            "TASWEYA" or "PAYMENT_ORDERS" => (true, false, true, false),
+            "MOQAYSA" or "CUSTOMERS" or "FORMULAS" or "REPORTS" => (true, false, false, false),
+            _ => (false, false, false, false)
+        });
 
         // 6. Seed Native Identity Roles & Claims (HIGH-06)
         string[] standardRoles = { "Developer", "Admin", "Accountant", "Manager", "Employee" };
